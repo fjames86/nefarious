@@ -1,3 +1,5 @@
+;;;; Copyright (c) Frank James 2015 <frank.a.james@gmail.com>
+;;;; This code is licensed under the MIT license.
 
 
 (asdf:defsystem :nefarious
@@ -7,6 +9,7 @@
   :license "MIT"
   :components
   ((:file "package")
-   (:file "nfs" :depends-on ("package")))
+   (:file "nfs" :depends-on ("package"))
+   (:file "interface" :depends-on ("nfs")))
   :depends-on (:frpc))
 
