@@ -54,7 +54,7 @@
    (otherwise lookup-res-fail)))
 
 (defun handle-lookup (handle name)
-  (declare (ignore handle name))
+  (declare (ignore name))
   (make-xunion :ok 
 	       (make-lookup-res-ok :object handle)))
 				   
@@ -127,7 +127,7 @@
    (otherwise read-res-fail)))
 
 (defun handle-read (file offset count)
-  (declare (ignore file offset handle))
+  (declare (ignore file offset count))
   (make-xunion :ok 
 	       (make-read-res-ok :count 0
 				 :eof t)))
@@ -526,109 +526,133 @@
 
 ;; ------------ the interface itself ---------------
 
-(with-rpc-program (+nfs-program+)
-  (with-rpc-version (+nfs-version+)
-    (defrpc call-null (:void :void) 0)
-    (defhandler %handle-null (void) 0
-      (declare (ignore void))
-      nil)
+(use-rpc-program +nfs-program+)
+(use-rpc-version +nfs-version+)
 
-    (defrpc call-getattr (get-attr-args get-attr-res) 1)
-    (defhandler %handle-getattr (handle) 1
-      (handle-getattr handle))
+;; void NFSPROC3_NULL(void)                    = 0;
+(defrpc call-null (:void :void) 0)
+(defhandler %handle-null (void) 0
+  (declare (ignore void))
+  nil)
 
-    (defrpc call-setattr (set-attr-args set-aggr-res) 2)
-    (defhandler %handle-setattr (args) 2
-      (with-slots (handle new-attrs guard) args
-	(handle-setattr handle new-attrs sattr3 guard)))
+;; GETATTR3res NFSPROC3_GETATTR(GETATTR3args)         = 1;
+(defrpc call-getattr (get-attr-args get-attr-res) 1)
+(defhandler %handle-getattr (handle) 1
+  (handle-getattr handle))
 
-    (defrpc call-lookup (lookup-args lookup-res) 3)
-    (defhandler %handle-lookup (arg) 3
-      (with-slots (dir name) arg
-	(handle-lookup dir name)))
+;; SETATTR3res NFSPROC3_SETATTR(SETATTR3args)         = 2;
+(defrpc call-setattr (set-attr-args set-attr-res) 2)
+(defhandler %handle-setattr (args) 2
+  (with-slots (handle new-attrs guard) args
+    (handle-setattr handle new-attrs guard)))
 
-    (defrpc call-access (access-args access-res) 4)
-    (defhandler %handle-access (args) 4
-      (with-slots (object access) args
-	(handle-access object access)))
+;; LOOKUP3res NFSPROC3_LOOKUP(LOOKUP3args)           = 3;
+(defrpc call-lookup (lookup-args lookup-res) 3)
+(defhandler %handle-lookup (arg) 3
+  (with-slots (dir name) arg
+    (handle-lookup dir name)))
 
-    (defrpc call-readlink (readlink-args readlink-res) 5)
-    (defhandler %handle-readlink (args) 5
-      (handle-readlink args))
+;; ACCESS3res NFSPROC3_ACCESS(ACCESS3args)           = 4;
+(defrpc call-access (access-args access-res) 4)
+(defhandler %handle-access (args) 4
+  (with-slots (object access) args
+    (handle-access object access)))
 
-    (defrpc call-read (read-args read-res) 6)
-    (defhandler %handle-read (args) 6
-      (with-slots (file offset count) args
-	(handle-read file offset count)))
+;; READLINK3res NFSPROC3_READLINK(READLINK3args)       = 5;
+(defrpc call-readlink (readlink-args readlink-res) 5)
+(defhandler %handle-readlink (args) 5
+  (handle-readlink args))
 
-    (defrpc call-write (write-args write-res) 7)
-    (defhandler %handle-write (args) 7
-      (with-slots (file offset count stable opaque) args
-	(handle-write file offset count stable opaque)))
+;; READ3res NFSPROC3_READ(READ3args)               = 6;
+(defrpc call-read (read-args read-res) 6)
+(defhandler %handle-read (args) 6
+  (with-slots (file offset count) args
+    (handle-read file offset count)))
 
-    (defrpc call-create (create-args create-res) 8)
-    (defhandler %handle-create (args) 8
-      (with-slots (where how) args
-	(handle-create where how)))
+;; WRITE3res NFSPROC3_WRITE(WRITE3args)             = 7;
+(defrpc call-write (write-args write-res) 7)
+(defhandler %handle-write (args) 7
+  (with-slots (file offset count stable opaque) args
+    (handle-write file offset count stable opaque)))
 
-    (defrpc call-mkdir (mkdir-args mkdir-res) 9)
-    (defhandler %handle-mkdir (args) 9
-      (with-slots (where attrs) args
-	(handle-mkdir where attrs)))
+;; CREATE3res NFSPROC3_CREATE(CREATE3args)           = 8;
+(defrpc call-create (create-args create-res) 8)
+(defhandler %handle-create (args) 8
+  (with-slots (where how) args
+    (handle-create where how)))
 
-    (defrpc call-symlink (symlink-args symlink-res) 10)
-    (defhandler %handle-symlink (args) 10
-      (with-slots (attrs data) args
-	(handle-symlink attrs data)))
+;; MKDIR3res NFSPROC3_MKDIR(MKDIR3args)             = 9;
+(defrpc call-mkdir (mkdir-args mkdir-res) 9)
+(defhandler %handle-mkdir (args) 9
+  (with-slots (where attrs) args
+    (handle-mkdir where attrs)))
 
-    (defrpc call-mknod (mknod-args mknod-res) 11)
-    (defhandler %handle-mknod (args) 11
-      (with-slots (attrs spec) args
-	(handle-mknod attrs spec)))
+;; SYMLINK3res NFSPROC3_SYMLINK(SYMLINK3args)         = 10;
+(defrpc call-symlink (symlink-args symlink-res) 10)
+(defhandler %handle-symlink (args) 10
+  (with-slots (attrs data) args
+    (handle-symlink attrs data)))
 
-    (defrpc call-remove (remove-args remove-res) 12)
-    (defhandler %handle-remove (args) 12
-      (with-slots (dir name) args
-	(handle-remove dir name)))
+;; MKNOD3res NFSPROC3_MKNOD(MKNOD3args)             = 11;
+(defrpc call-mknod (mknod-args mknod-res) 11)
+(defhandler %handle-mknod (args) 11
+  (with-slots (attrs spec) args
+    (handle-mknod attrs spec)))
 
-    (defrpc call-rmdir (rmdir-args rmdir-res) 13)
-    (defhandler %handle-rmdir (args) 13
-      (with-slots (dir name) args
-	(handle-rmdir dir name)))
+;; REMOVE3res NFSPROC3_REMOVE(REMOVE3args)           = 12;
+(defrpc call-remove (remove-args remove-res) 12)
+(defhandler %handle-remove (args) 12
+  (with-slots (dir name) args
+    (handle-remove dir name)))
 
-    (defrpc call-rename (rename-args rename-res) 14)
-    (defhandler %handle-rename (args) 14
-      (with-slots (from to) args
-	(handle-rename from to)))
+;; RMDIR3res NFSPROC3_RMDIR(RMDIR3args)             = 13;
+(defrpc call-rmdir (rmdir-args rmdir-res) 13)
+(defhandler %handle-rmdir (args) 13
+  (with-slots (dir name) args
+    (handle-rmdir dir name)))
 
-    (defrpc call-link (link-args link-res) 15)
-    (defhandler %handle-link (args) 15
-      (with-slots (file link) args
-	(handle-link file link)))
+;; RENAME3res NFSPROC3_RENAME(RENAME3args)           = 14;
+(defrpc call-rename (rename-args rename-res) 14)
+(defhandler %handle-rename (args) 14
+  (with-slots (from to) args
+    (handle-rename from to)))
 
-    (defrpc call-read-dir (read-dir-args read-dir-res) 16)
-    (defhandler %handle-read-dir (args) 16
-      (with-slots (dir cookie verf count) args
-	(handle-read-dir dir cookie verf count)))
+;; LINK3res NFSPROC3_LINK(LINK3args)               = 15;
+(defrpc call-link (link-args link-res) 15)
+(defhandler %handle-link (args) 15
+  (with-slots (file link) args
+    (handle-link file link)))
 
-    (defrpc call-read-dir* (read-dir*-args read-dir*-res) 17)
-    (defhandler %handle-read-dir* (args) 17
-      (with-slots (dir cookie verf count max) args
-	(handle-read-dir* dir cookie verf count max)))
+;; READDIR3res NFSPROC3_READDIR(READDIR3args)         = 16;
+(defrpc call-read-dir (read-dir-args read-dir-res) 16)
+(defhandler %handle-read-dir (args) 16
+  (with-slots (dir cookie verf count) args
+    (handle-read-dir dir cookie verf count)))
 
-    (defrpc call-fs-stat (fs-stat-args fs-stat-res) 18)
-    (defhandler %handle-fs-stat (args) 18
-      (handle-fs-stat args))
+;; READDIRPLUS3res NFSPROC3_READDIRPLUS(READDIRPLUS3args) = 17;
+(defrpc call-read-dir* (read-dir*-args read-dir*-res) 17)
+(defhandler %handle-read-dir* (args) 17
+  (with-slots (dir cookie verf count max) args
+    (handle-read-dir* dir cookie verf count max)))
 
-    (defrpc call-fs-info (fs-info-args fs-info-res) 19)
-    (defhandler %handle-fs-info (args) 19
-      (handle-fs-info args))
+;; FSSTAT3res NFSPROC3_FSSTAT(FSSTAT3args)           = 18;
+(defrpc call-fs-stat (fs-stat-args fs-stat-res) 18)
+(defhandler %handle-fs-stat (args) 18
+  (handle-fs-stat args))
 
-    (defrpc call-path-conf (path-conf-args path-conf-res) 20)
-    (defhandler %handle-path-conf (args) 20
-      (handle-path-conf args))
+;; FSINFO3res NFSPROC3_FSINFO(FSINFO3args)           = 19;
+(defrpc call-fs-info (fs-info-args fs-info-res) 19)
+(defhandler %handle-fs-info (args) 19
+  (handle-fs-info args))
 
-    (defrpc call-commit (commit-args commit-res) 21)
-    (defhandler %handle-commit (args) 21
-      (with-slots (file offset count) args
-	(handle-commit file offset count)))))
+;; PATHCONF3res NFSPROC3_PATHCONF(PATHCONF3args)       = 20;
+(defrpc call-path-conf (path-conf-args path-conf-res) 20)
+(defhandler %handle-path-conf (args) 20
+  (handle-path-conf args))
+
+;; COMMIT3res NFSPROC3_COMMIT(COMMIT3args)           = 21;
+(defrpc call-commit (commit-args commit-res) 21)
+(defhandler %handle-commit (args) 21
+  (with-slots (file offset count) args
+    (handle-commit file offset count)))
+
