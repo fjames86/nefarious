@@ -22,7 +22,7 @@
 
 (defxtype* file-id3 () :uint64)
 
-(defxtype* cookie () :uint64)
+(defxtype* cookie3 () :uint64)
 
 (defxtype* cookied-verf3 () 
   (:array :octet +nfs-cookie-verf-size+))
@@ -34,7 +34,7 @@
   (:array :octet +nfs-write-verf-size+))
 
 (defxtype* uid3 () :uint32)
-(defxtype* gid () :uint32)
+(defxtype* gid3 () :uint32)
 (defxtype* size3 () :uint64)   
 (defxtype* offset3 () :uint64)
 (defxtype* mode3 () :uint32)
