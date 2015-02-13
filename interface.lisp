@@ -3,7 +3,24 @@
 
 ;; getattr  - get file attributes
 (defxtype* get-attr-args () nfs-fh3)
-(defxtype* get-attr-res () fattr3)
+(defxtype* get-attr-res-ok () fattr3)
+(defxunion get-attr-res (nfs-stat3)
+  ((:ok get-attr-res-ok)
+   (otherwise :void)))
+
+(defun handle-getattr (handle)
+  (declare (ignore handle))
+  (make-xunion :ok
+	       (make-fattr3 :mode 0
+			    :uid 0
+			    :gid 0
+			    :size 0
+			    :used 0
+			    :rdev (make-specdata3)
+			    :fileid 0
+			    :atime (make-nfs-time3)
+			    :mtime (make-nfs-time3)
+			    :ctime (make-nfs-time3))))
 
 ;; setattr -- set file attributes
 (defxtype* sattr-guard () (:optional nfs-time3))
@@ -17,6 +34,11 @@
  ((:ok set-attr-res-ok)
   (otherwise set-attr-res-fail)))
 
+(defun handle-setattr (handle new-attrs guard)
+  (declare (ignore handle new-attrs guard))
+  (make-xunion :ok (make-wcc-data)))
+
+
 ;; lookup -- lookup filename
 (defxtype* lookup-args () dir-op-args3)
 (defxstruct lookup-res-ok ()
@@ -28,6 +50,12 @@
 (defxunion lookup-res (nfs-stat3)
   ((:ok lookup-res-ok)
    (otherwise lookup-res-fail)))
+
+(defun handle-lookup (handle name)
+  (declare (ignore handle name))
+  (make-xunion :ok 
+	       (make-lookup-res-ok :object handle)))
+				   
 
 ;; access -- check access permission
 
@@ -53,6 +81,11 @@
   ((:ok access-res-ok)
    (otherwise access-res-fail)))
 
+(defun handle-access (handle access)
+  (declare (ignore handle access))
+  (make-xunion :ok
+	       (make-access-res-ok)))
+
 ;; readlink -- read from symbolic link
 
 (defxtype* readlink-args () nfs-fh3)
@@ -66,6 +99,11 @@
 (defxunion readlink-res (nfs-stat3)
   ((:ok readlink-res-ok)
    (otherwise readlink-res-fail)))
+
+(defun handle-readlink (handle)
+  (declare (ignore handle))
+  (make-xunion :ok
+	       (make-readlink-res-ok :data "")))
 
 ;; read -- read from file
 
@@ -86,6 +124,12 @@
   ((:ok read-res-ok)
    (otherwise read-res-fail)))
 
+(defun handle-read (file offset count)
+  (declare (ignore file offset handle))
+  (make-xunion :ok 
+	       (make-read-res-ok :count 0
+				 :eof t)))
+				 
 ;; write -- write to file
 
 (defxenum stable-how 
@@ -111,6 +155,13 @@
 (defxunion write-res (nfs-stat3)
   ((:ok write-res-ok)
    (otherwise write-res-fail)))
+
+(defun handle-write (file offset count stable data)
+  (declare (ignore file offset count stable data))
+  (make-xunion :ok
+	       (make-write-res-ok :count 0
+				  :verf (make-array +nfs-write-verf-size+ :initial-element 0))))
+
 
 ;; create -- create a file
 
@@ -138,6 +189,12 @@
   ((:ok create-res-ok)
    (otherwise create-res-fail)))
 
+(defun handle-create (where how)
+  (declare (ignore where how))
+  (make-xunion :ok
+	       (make-create-res-ok)))
+
+
 ;; mkdir -- create a directory 
 
 (defxstruct mkdir-args ()
@@ -154,6 +211,11 @@
 (defxunion mkdir-res (nfs-stat3)
   ((:ok mkdir-res-ok)
    (otherwise mkdir-res-fail)))
+
+(defun handle-mkdir (where attrs)
+  (declare (ignore where attrs))
+  (make-xunion :ok 
+	       (make-mkdir-res-ok)))
 
 ;; symlink -- create a symbolic link
 
@@ -175,6 +237,11 @@
 (defxunion symlink-res (nfs-stat3)
   ((:ok symlink-res-ok)
    (otherwise symlink-res-fail)))
+
+(defun handle-symlink (attrs data)
+  (declare (ignore attrs data))
+  (make-xunion :ok
+	       (make-symlink-res-ok)))
 
 ;; mknod -- create special device
 
@@ -202,6 +269,11 @@
   ((:ok mknod-res-ok)
    (otherwise mknod-res-fail)))
 
+(defun handle-mknod (attrs spec)
+  (declare (ignore attrs spec))
+  (make-xunion :ok
+	       (make-mknod-res-ok)))
+
 ;; remove -- remove a file
 
 (defxtype* remove-args () dir-op-args)
@@ -211,6 +283,10 @@
   ((:ok remove-res-ok)
    (otherwise remove-res-fail)))
 
+(defun handle-remove (handle name)
+  (declare (ignore handle name))
+  (make-xunion :ok nil))
+	       
 ;; rmdir -- remove a directory 
 
 (defxtype* rmdir-args () dir-op-args3)
@@ -220,6 +296,10 @@
   ((:ok rmdir-res-ok)
    (otherwise rmdir-res-fail)))
 
+(defun handle-rmdir (handle name)
+  (declare (ignore handle name))
+  (make-xunion :ok nil))
+	       
 ;; rename -- rename a file or directory 
 
 (defxstruct rename-args ()
@@ -237,6 +317,11 @@
 (defxunion rename-res (nfs-stat3)
   ((:ok rename-res-ok)
    (otherwise rename-res-fail)))
+
+(defun handle-rename (from to)
+  (declare (ignore from to))
+  (make-xunion :ok
+	       (make-rename-res-ok)))
 
 ;; link -- create a link to a file
 
@@ -256,12 +341,17 @@
   ((:ok link-res-ok)
    (otherwise link-res-fail)))
 
+(defun handle-link (file link)
+  (declare (ignore file link))
+  (make-xunion :ok
+	       (make-link-res-ok)))
+
 ;; read dir -- read from a directory 
 
 (defxstruct read-dir-args ()
   ((dir nfs-fh3)
    (cookie cookie3)
-   (cookie-verf3 verf)
+   (verf cookie-verf3)
    (count count3)))
 
 (defxstruct entry3 ()
@@ -285,6 +375,10 @@
   ((:ok read-dir-res-ok)
    (otherwise read-dir-res-fail)))
   
+(defun handle-read-dir (dir cookie verf count)
+  (declare (ignore dir cookie verf count))
+  (make-xunion :ok
+	       (make-read-dir-res-ok)))
 
 ;; read dir plus -- extended read from directory 
 
@@ -318,6 +412,11 @@
   ((:ok read-dir*-res-ok)
    (otherwise read-dir*-res-fail)))
 
+(defun handle-read-dir* (dir cookie verf count max)
+  (declare (ignore dir cookie verf count max))
+  (make-xunion :ok 
+	       (make-read-dir*-res-ok)))
+
 ;; fs stat -- get dynamic filesystem info
 
 (defxtype* fs-stat-args () nfs-fh3)
@@ -337,6 +436,11 @@
 (defxunion fs-stat-res (nfs-stat3)
   ((:ok fs-stat-res-ok)
    (otherwise fs-stat-res-fail)))
+
+(defun handle-fs-stat (handle)
+  (declare (ignore handle))
+  (make-xunion :ok 
+	       (make-fs-stat-res-ok)))
 
 ;; fs info -- get static file system info
 
@@ -367,6 +471,11 @@
   ((:ok fs-info-res-ok)
    (otherwise fs-info-res-fail)))
 
+(defun handle-fs-info (handle)
+  (declare (ignore handle))
+  (make-xunion :ok
+	       (make-fs-info-res-ok)))
+
 ;; pstconf -- retrieve posix information
 
 (defxtype* path-conf-args () nfs-fh3)
@@ -386,6 +495,11 @@
   ((:ok path-conf-res-ok)
    (otherwise path-conf-res-fail)))
 
+(defun handle-path-conf (handle)
+  (declare (ignore handle))
+  (make-xunion :ok
+	       (make-path-conf-res-ok)))
+
 ;; commit -- commit cached data on a server to stable storage
 
 (defxstruct commit-args ()
@@ -403,31 +517,116 @@
   ((:ok commit-res-ok)
    (otherwise commit-res-fail)))
 
-
+(defun handle-commit (file offset count)
+  (declare (ignore file offset count))
+  (make-xunion :ok
+	       (make-commit-res-ok)))
 
 ;; ------------ the interface itself ---------------
 
 (with-rpc-program (+nfs-program+)
   (with-rpc-version (+nfs-version+)
     (defrpc call-null (:void :void) 0)
+    (defhandler %handle-null (void) 0
+      (declare (ignore void))
+      nil)
+
     (defrpc call-getattr (get-attr-args get-attr-res) 1)
+    (defhandler %handle-getattr (handle) 1
+      (handle-getattr handle))
+
     (defrpc call-setattr (set-attr-args set-aggr-res) 2)
+    (defhandler %handle-setattr (args) 2
+      (with-slots (handle new-attrs guard) args
+	(handle-setattr handle new-attrs sattr3 guard)))
+
     (defrpc call-lookup (lookup-args lookup-res) 3)
+    (defhandler %handle-lookup (arg) 3
+      (with-slots (dir name) arg
+	(handle-lookup dir name)))
+
     (defrpc call-access (access-args access-res) 4)
+    (defhandler %handle-access (args) 4
+      (with-slots (object access) args
+	(handle-access object access)))
+
     (defrpc call-readlink (readlink-args readlink-res) 5)
+    (defhandler %handle-readlink (args) 5
+      (handle-readlink args))
+
     (defrpc call-read (read-args read-res) 6)
+    (defhandler %handle-read (args) 6
+      (with-slots (file offset count) args
+	(handle-read file offset count)))
+
     (defrpc call-write (write-args write-res) 7)
+    (defhandler %handle-write (args) 7
+      (with-slots (file offset count stable opaque) args
+	(handle-write file offset count stable opaque)))
+
     (defrpc call-create (create-args create-res) 8)
+    (defhandler %handle-create (args) 8
+      (with-slots (where how) args
+	(handle-create where how)))
+
     (defrpc call-mkdir (mkdir-args mkdir-res) 9)
+    (defhandler %handle-mkdir (args) 9
+      (with-slots (where attrs) args
+	(handle-mkdir where attrs)))
+
     (defrpc call-symlink (symlink-args symlink-res) 10)
+    (defhandler %handle-symlink (args) 10
+      (with-slots (attrs data) args
+	(handle-symlink attrs data)))
+
     (defrpc call-mknod (mknod-args mknod-res) 11)
+    (defhandler %handle-mknod (args) 11
+      (with-slots (attrs spec) args
+	(handle-mknod attrs spec)))
+
     (defrpc call-remove (remove-args remove-res) 12)
+    (defhandler %handle-remove (args) 12
+      (with-slots (dir name) args
+	(handle-remove dir name)))
+
     (defrpc call-rmdir (rmdir-args rmdir-res) 13)
+    (defhandler %handle-rmdir (args) 13
+      (with-slots (dir name) args
+	(handle-rmdir dir name)))
+
     (defrpc call-rename (rename-args rename-res) 14)
+    (defhandler %handle-rename (args) 14
+      (with-slots (from to) args
+	(handle-rename from to)))
+
     (defrpc call-link (link-args link-res) 15)
+    (defhandler %handle-link (args) 15
+      (with-slots (file link) args
+	(handle-link file link)))
+
     (defrpc call-read-dir (read-dir-args read-dir-res) 16)
+    (defhandler %handle-read-dir (args) 16
+      (with-slots (dir cookie verf count) args
+	(handle-read-dir dir cookie verf count)))
+
     (defrpc call-read-dir* (read-dir*-args read-dir*-res) 17)
+    (defhandler %handle-read-dir* (args) 17
+      (with-slots (dir cookie verf count max) args
+	(handle-read-dir* dir cookie verf count max)))
+
     (defrpc call-fs-stat (fs-stat-args fs-stat-res) 18)
+    (defhandler %handle-fs-stat (args) 18
+      (handle-fs-stat args))
+
     (defrpc call-fs-info (fs-info-args fs-info-res) 19)
+    (defhandler %handle-fs-info (args) 19
+      (handle-fs-info args))
+
     (defrpc call-path-conf (path-conf-args path-conf-res) 20)
-    (defrpc call-commit (commit-args commit-res) 21)))
+    (defhandler %handle-path-conf (args) 20
+      (handle-path-conf args))
+
+    (defrpc call-commit (commit-args commit-res) 21)
+    (defhandler %handle-commit (args) 21
+      (with-slots (file offset count) args
+	(handle-commit file offset count)))))

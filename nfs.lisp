@@ -20,7 +20,7 @@
 (defxtype* nfs-path3 ()
   (:varray :string))
 
-(defxtype* file-id3 () :uint64)
+(defxtype* fileid3 () :uint64)
 
 (defxtype* cookie3 () :uint64)
 
