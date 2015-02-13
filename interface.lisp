@@ -3,6 +3,19 @@
 
 (in-package #:nefarious)
 
+(use-rpc-program +nfs-program+)
+(use-rpc-version +nfs-version+)
+
+;; ------------------------------------------------------
+;; void NFSPROC3_NULL(void)                    = 0;
+(defrpc call-null (:void :void) 0)
+(defhandler %handle-null (void) 0
+  (declare (ignore void))
+  nil)
+
+;; ------------------------------------------------------
+;; GETATTR3res NFSPROC3_GETATTR(GETATTR3args)         = 1;
+
 ;; getattr  - get file attributes
 (defxtype* get-attr-args () nfs-fh3)
 (defxtype* get-attr-res-ok () fattr3)
@@ -10,7 +23,9 @@
   ((:ok get-attr-res-ok)
    (otherwise :void)))
 
-(defun handle-getattr (handle)
+(defrpc call-getattr (get-attr-args get-attr-res) 1)
+
+(defhandler handle-getattr (handle) 1
   (declare (ignore handle))
   (make-xunion :ok
 	       (make-fattr3 :mode 0
@@ -24,6 +39,10 @@
 			    :mtime (make-nfs-time3)
 			    :ctime (make-nfs-time3))))
 
+
+;; ------------------------------------------------------
+;; SETATTR3res NFSPROC3_SETATTR(SETATTR3args)         = 2;
+
 ;; setattr -- set file attributes
 (defxtype* sattr-guard () (:optional nfs-time3))
 (defxstruct set-attr-args ()
@@ -36,10 +55,16 @@
  ((:ok set-attr-res-ok)
   (otherwise set-attr-res-fail)))
 
-(defun handle-setattr (handle new-attrs guard)
-  (declare (ignore handle new-attrs guard))
-  (make-xunion :ok (make-wcc-data)))
+(defrpc call-setattr (set-attr-args set-attr-res) 2)
 
+(defhandler %handle-setattr (args) 2
+  (with-slots (handle new-attrs guard) args
+    (declare (ignore handle new-attrs guard))
+    (make-xunion :ok (make-wcc-data))))
+
+
+;; ------------------------------------------------------
+;; LOOKUP3res NFSPROC3_LOOKUP(LOOKUP3args)           = 3;
 
 ;; lookup -- lookup filename
 (defxtype* lookup-args () dir-op-args3)
@@ -53,13 +78,18 @@
   ((:ok lookup-res-ok)
    (otherwise lookup-res-fail)))
 
-(defun handle-lookup (handle name)
-  (declare (ignore name))
-  (make-xunion :ok 
-	       (make-lookup-res-ok :object handle)))
-				   
+(defrpc call-lookup (lookup-args lookup-res) 3)
 
+(defhandler %handle-lookup (arg) 3
+  (with-slots (dir name) arg
+    (declare (ignore name))
+    (make-xunion :ok 
+		 (make-lookup-res-ok :object dir))))
+				   
+;; ------------------------------------------------------
 ;; access -- check access permission
+
+;; ACCESS3res NFSPROC3_ACCESS(ACCESS3args)           = 4;
 
 (defxenum nfs-access
  ((:read #x0001)
@@ -83,12 +113,16 @@
   ((:ok access-res-ok)
    (otherwise access-res-fail)))
 
-(defun handle-access (handle access)
-  (declare (ignore handle access))
-  (make-xunion :ok
-	       (make-access-res-ok)))
+(defrpc call-access (access-args access-res) 4)
+(defhandler %handle-access (args) 4
+  (with-slots (object access) args
+    (declare (ignore object access))
+    (make-xunion :ok
+		 (make-access-res-ok))))
 
+;; ------------------------------------------------------
 ;; readlink -- read from symbolic link
+;; READLINK3res NFSPROC3_READLINK(READLINK3args)       = 5;
 
 (defxtype* readlink-args () nfs-fh3)
 
@@ -102,12 +136,15 @@
   ((:ok readlink-res-ok)
    (otherwise readlink-res-fail)))
 
-(defun handle-readlink (handle)
+(defrpc call-readlink (readlink-args readlink-res) 5)
+(defhandler %handle-readlink (handle) 5
   (declare (ignore handle))
   (make-xunion :ok
 	       (make-readlink-res-ok :data "")))
 
+;; ------------------------------------------------------
 ;; read -- read from file
+;; READ3res NFSPROC3_READ(READ3args)               = 6;
 
 (defxstruct read-args ()
   ((file nfs-fh3)
@@ -126,13 +163,18 @@
   ((:ok read-res-ok)
    (otherwise read-res-fail)))
 
-(defun handle-read (file offset count)
-  (declare (ignore file offset count))
-  (make-xunion :ok 
-	       (make-read-res-ok :count 0
-				 :eof t)))
+(defrpc call-read (read-args read-res) 6)
+
+(defhandler %handle-read (args) 6
+  (with-slots (file offset count) args
+    (declare (ignore file offset count))
+    (make-xunion :ok 
+		 (make-read-res-ok :count 0
+				   :eof t))))
 				 
+;; ------------------------------------------------------
 ;; write -- write to file
+;; WRITE3res NFSPROC3_WRITE(WRITE3args)             = 7;
 
 (defxenum stable-how 
   ((:unstable 0)
@@ -158,14 +200,18 @@
   ((:ok write-res-ok)
    (otherwise write-res-fail)))
 
-(defun handle-write (file offset count stable data)
-  (declare (ignore file offset count stable data))
-  (make-xunion :ok
-	       (make-write-res-ok :count 0
-				  :verf (make-array +nfs-write-verf-size+ :initial-element 0))))
+(defrpc call-write (write-args write-res) 7)
+(defhandler %handle-write (args) 7
+  (with-slots (file offset count stable opaque) args
+    (declare (ignore file offset count stable opaque))
+    (make-xunion :ok
+		 (make-write-res-ok :count 0
+				    :verf (make-array +nfs-write-verf-size+ 
+						      :initial-element 0)))))
 
-
+;; ------------------------------------------------------
 ;; create -- create a file
+;; CREATE3res NFSPROC3_CREATE(CREATE3args)           = 8;
 
 (defxenum create-mode3 
   ((:unchecked 0)
@@ -191,13 +237,16 @@
   ((:ok create-res-ok)
    (otherwise create-res-fail)))
 
-(defun handle-create (where how)
-  (declare (ignore where how))
-  (make-xunion :ok
-	       (make-create-res-ok)))
+(defrpc call-create (create-args create-res) 8)
+(defhandler %handle-create (args) 8
+  (with-slots (where how) args
+    (declare (ignore where how))
+    (make-xunion :ok
+		 (make-create-res-ok))))
 
-
+;; ------------------------------------------------------
 ;; mkdir -- create a directory 
+;; MKDIR3res NFSPROC3_MKDIR(MKDIR3args)             = 9;
 
 (defxstruct mkdir-args ()
   ((where dir-op-args3)
@@ -214,12 +263,16 @@
   ((:ok mkdir-res-ok)
    (otherwise mkdir-res-fail)))
 
-(defun handle-mkdir (where attrs)
-  (declare (ignore where attrs))
-  (make-xunion :ok 
-	       (make-mkdir-res-ok)))
+(defrpc call-mkdir (mkdir-args mkdir-res) 9)
+(defhandler %handle-mkdir (args) 9
+  (with-slots (where attrs) args
+    (declare (ignore where attrs))
+    (make-xunion :ok 
+		 (make-mkdir-res-ok))))
 
+;; ------------------------------------------------------
 ;; symlink -- create a symbolic link
+;; SYMLINK3res NFSPROC3_SYMLINK(SYMLINK3args)         = 10;
 
 (defxstruct symlink-data3 ()
   ((attrs sattr3)
@@ -240,12 +293,16 @@
   ((:ok symlink-res-ok)
    (otherwise symlink-res-fail)))
 
-(defun handle-symlink (attrs data)
-  (declare (ignore attrs data))
-  (make-xunion :ok
-	       (make-symlink-res-ok)))
+(defrpc call-symlink (symlink-args symlink-res) 10)
+(defhandler %handle-symlink (args) 10
+  (with-slots (attrs data) args
+    (declare (ignore attrs data))
+    (make-xunion :ok
+		 (make-symlink-res-ok))))
 
+;; ------------------------------------------------------
 ;; mknod -- create special device
+;; MKNOD3res NFSPROC3_MKNOD(MKNOD3args)             = 11;
 
 (defxstruct device-data3 ()
   ((attrs sattr3)
@@ -271,24 +328,32 @@
   ((:ok mknod-res-ok)
    (otherwise mknod-res-fail)))
 
-(defun handle-mknod (attrs spec)
-  (declare (ignore attrs spec))
-  (make-xunion :ok
-	       (make-mknod-res-ok)))
+(defrpc call-mknod (mknod-args mknod-res) 11)
+(defhandler %handle-mknod (args) 11
+  (with-slots (attrs spec) args
+    (declare (ignore attrs spec))
+    (make-xunion :ok
+		 (make-mknod-res-ok))))
 
+
+;; ------------------------------------------------------
 ;; remove -- remove a file
 
-(defxtype* remove-args () dir-op-args)
+(defxtype* remove-args () dir-op-args3)
 (defxtype* remove-res-ok () wcc-data)
 (defxtype* remove-res-fail () wcc-data)
 (defxunion remove-res (nfs-stat3)
   ((:ok remove-res-ok)
    (otherwise remove-res-fail)))
 
-(defun handle-remove (handle name)
-  (declare (ignore handle name))
-  (make-xunion :ok nil))
+;; REMOVE3res NFSPROC3_REMOVE(REMOVE3args)           = 12;
+(defrpc call-remove (remove-args remove-res) 12)
+(defhandler %handle-remove (args) 12
+  (with-slots (dir name) args
+    (declare (ignore dir name))
+    (make-xunion :ok nil)))
 	       
+;; ------------------------------------------------------
 ;; rmdir -- remove a directory 
 
 (defxtype* rmdir-args () dir-op-args3)
@@ -298,10 +363,14 @@
   ((:ok rmdir-res-ok)
    (otherwise rmdir-res-fail)))
 
-(defun handle-rmdir (handle name)
-  (declare (ignore handle name))
-  (make-xunion :ok nil))
+;; RMDIR3res NFSPROC3_RMDIR(RMDIR3args)             = 13;
+(defrpc call-rmdir (rmdir-args rmdir-res) 13)
+(defhandler %handle-rmdir (args) 13
+  (with-slots (dir name) args
+    (declare (ignore dir name))
+    (make-xunion :ok nil)))
 	       
+;; ------------------------------------------------------
 ;; rename -- rename a file or directory 
 
 (defxstruct rename-args ()
@@ -320,11 +389,16 @@
   ((:ok rename-res-ok)
    (otherwise rename-res-fail)))
 
-(defun handle-rename (from to)
-  (declare (ignore from to))
-  (make-xunion :ok
-	       (make-rename-res-ok)))
+;; RENAME3res NFSPROC3_RENAME(RENAME3args)           = 14;
+(defrpc call-rename (rename-args rename-res) 14)
+(defhandler %handle-rename (args) 14
+  (with-slots (from to) args
+    (declare (ignore from to))
+    (make-xunion :ok
+		 (make-rename-res-ok))))
 
+
+;; ------------------------------------------------------
 ;; link -- create a link to a file
 
 (defxstruct link-args ()
@@ -343,11 +417,15 @@
   ((:ok link-res-ok)
    (otherwise link-res-fail)))
 
-(defun handle-link (file link)
-  (declare (ignore file link))
-  (make-xunion :ok
-	       (make-link-res-ok)))
+;; LINK3res NFSPROC3_LINK(LINK3args)               = 15;
+(defrpc call-link (link-args link-res) 15)
+(defhandler %handle-link (args) 15
+  (with-slots (file link) args
+    (declare (ignore file link))
+    (make-xunion :ok
+		 (make-link-res-ok))))
 
+;; ------------------------------------------------------
 ;; read dir -- read from a directory 
 
 (defxstruct read-dir-args ()
@@ -377,11 +455,15 @@
   ((:ok read-dir-res-ok)
    (otherwise read-dir-res-fail)))
   
-(defun handle-read-dir (dir cookie verf count)
-  (declare (ignore dir cookie verf count))
-  (make-xunion :ok
-	       (make-read-dir-res-ok)))
+;; READDIR3res NFSPROC3_READDIR(READDIR3args)         = 16;
+(defrpc call-read-dir (read-dir-args read-dir-res) 16)
+(defhandler %handle-read-dir (args) 16
+  (with-slots (dir cookie verf count) args
+    (declare (ignore dir cookie verf count))
+    (make-xunion :ok
+		 (make-read-dir-res-ok))))
 
+;; ------------------------------------------------------
 ;; read dir plus -- extended read from directory 
 
 (defxstruct read-dir*-args ()
@@ -414,11 +496,15 @@
   ((:ok read-dir*-res-ok)
    (otherwise read-dir*-res-fail)))
 
-(defun handle-read-dir* (dir cookie verf count max)
-  (declare (ignore dir cookie verf count max))
-  (make-xunion :ok 
-	       (make-read-dir*-res-ok)))
+;; READDIRPLUS3res NFSPROC3_READDIRPLUS(READDIRPLUS3args) = 17;
+(defrpc call-read-dir* (read-dir*-args read-dir*-res) 17)
+(defhandler %handle-read-dir* (args) 17
+  (with-slots (dir cookie verf count max) args
+    (declare (ignore dir cookie verf count max))
+    (make-xunion :ok 
+		 (make-read-dir*-res-ok))))
 
+;; ------------------------------------------------------
 ;; fs stat -- get dynamic filesystem info
 
 (defxtype* fs-stat-args () nfs-fh3)
@@ -439,11 +525,14 @@
   ((:ok fs-stat-res-ok)
    (otherwise fs-stat-res-fail)))
 
-(defun handle-fs-stat (handle)
+;; FSSTAT3res NFSPROC3_FSSTAT(FSSTAT3args)           = 18;
+(defrpc call-fs-stat (fs-stat-args fs-stat-res) 18)
+(defhandler %handle-fs-stat (handle) 18
   (declare (ignore handle))
   (make-xunion :ok 
 	       (make-fs-stat-res-ok)))
 
+;; ------------------------------------------------------
 ;; fs info -- get static file system info
 
 (defxenum nfs-info 
@@ -473,11 +562,14 @@
   ((:ok fs-info-res-ok)
    (otherwise fs-info-res-fail)))
 
-(defun handle-fs-info (handle)
+;; FSINFO3res NFSPROC3_FSINFO(FSINFO3args)           = 19;
+(defrpc call-fs-info (fs-info-args fs-info-res) 19)
+(defhandler %handle-fs-info (handle) 19
   (declare (ignore handle))
   (make-xunion :ok
 	       (make-fs-info-res-ok)))
 
+;; ------------------------------------------------------
 ;; pstconf -- retrieve posix information
 
 (defxtype* path-conf-args () nfs-fh3)
@@ -497,11 +589,14 @@
   ((:ok path-conf-res-ok)
    (otherwise path-conf-res-fail)))
 
-(defun handle-path-conf (handle)
+;; PATHCONF3res NFSPROC3_PATHCONF(PATHCONF3args)       = 20;
+(defrpc call-path-conf (path-conf-args path-conf-res) 20)
+(defhandler %handle-path-conf (handle) 20
   (declare (ignore handle))
   (make-xunion :ok
 	       (make-path-conf-res-ok)))
 
+;; ------------------------------------------------------
 ;; commit -- commit cached data on a server to stable storage
 
 (defxstruct commit-args ()
@@ -519,140 +614,11 @@
   ((:ok commit-res-ok)
    (otherwise commit-res-fail)))
 
-(defun handle-commit (file offset count)
-  (declare (ignore file offset count))
-  (make-xunion :ok
-	       (make-commit-res-ok)))
-
-;; ------------ the interface itself ---------------
-
-(use-rpc-program +nfs-program+)
-(use-rpc-version +nfs-version+)
-
-;; void NFSPROC3_NULL(void)                    = 0;
-(defrpc call-null (:void :void) 0)
-(defhandler %handle-null (void) 0
-  (declare (ignore void))
-  nil)
-
-;; GETATTR3res NFSPROC3_GETATTR(GETATTR3args)         = 1;
-(defrpc call-getattr (get-attr-args get-attr-res) 1)
-(defhandler %handle-getattr (handle) 1
-  (handle-getattr handle))
-
-;; SETATTR3res NFSPROC3_SETATTR(SETATTR3args)         = 2;
-(defrpc call-setattr (set-attr-args set-attr-res) 2)
-(defhandler %handle-setattr (args) 2
-  (with-slots (handle new-attrs guard) args
-    (handle-setattr handle new-attrs guard)))
-
-;; LOOKUP3res NFSPROC3_LOOKUP(LOOKUP3args)           = 3;
-(defrpc call-lookup (lookup-args lookup-res) 3)
-(defhandler %handle-lookup (arg) 3
-  (with-slots (dir name) arg
-    (handle-lookup dir name)))
-
-;; ACCESS3res NFSPROC3_ACCESS(ACCESS3args)           = 4;
-(defrpc call-access (access-args access-res) 4)
-(defhandler %handle-access (args) 4
-  (with-slots (object access) args
-    (handle-access object access)))
-
-;; READLINK3res NFSPROC3_READLINK(READLINK3args)       = 5;
-(defrpc call-readlink (readlink-args readlink-res) 5)
-(defhandler %handle-readlink (args) 5
-  (handle-readlink args))
-
-;; READ3res NFSPROC3_READ(READ3args)               = 6;
-(defrpc call-read (read-args read-res) 6)
-(defhandler %handle-read (args) 6
-  (with-slots (file offset count) args
-    (handle-read file offset count)))
-
-;; WRITE3res NFSPROC3_WRITE(WRITE3args)             = 7;
-(defrpc call-write (write-args write-res) 7)
-(defhandler %handle-write (args) 7
-  (with-slots (file offset count stable opaque) args
-    (handle-write file offset count stable opaque)))
-
-;; CREATE3res NFSPROC3_CREATE(CREATE3args)           = 8;
-(defrpc call-create (create-args create-res) 8)
-(defhandler %handle-create (args) 8
-  (with-slots (where how) args
-    (handle-create where how)))
-
-;; MKDIR3res NFSPROC3_MKDIR(MKDIR3args)             = 9;
-(defrpc call-mkdir (mkdir-args mkdir-res) 9)
-(defhandler %handle-mkdir (args) 9
-  (with-slots (where attrs) args
-    (handle-mkdir where attrs)))
-
-;; SYMLINK3res NFSPROC3_SYMLINK(SYMLINK3args)         = 10;
-(defrpc call-symlink (symlink-args symlink-res) 10)
-(defhandler %handle-symlink (args) 10
-  (with-slots (attrs data) args
-    (handle-symlink attrs data)))
-
-;; MKNOD3res NFSPROC3_MKNOD(MKNOD3args)             = 11;
-(defrpc call-mknod (mknod-args mknod-res) 11)
-(defhandler %handle-mknod (args) 11
-  (with-slots (attrs spec) args
-    (handle-mknod attrs spec)))
-
-;; REMOVE3res NFSPROC3_REMOVE(REMOVE3args)           = 12;
-(defrpc call-remove (remove-args remove-res) 12)
-(defhandler %handle-remove (args) 12
-  (with-slots (dir name) args
-    (handle-remove dir name)))
-
-;; RMDIR3res NFSPROC3_RMDIR(RMDIR3args)             = 13;
-(defrpc call-rmdir (rmdir-args rmdir-res) 13)
-(defhandler %handle-rmdir (args) 13
-  (with-slots (dir name) args
-    (handle-rmdir dir name)))
-
-;; RENAME3res NFSPROC3_RENAME(RENAME3args)           = 14;
-(defrpc call-rename (rename-args rename-res) 14)
-(defhandler %handle-rename (args) 14
-  (with-slots (from to) args
-    (handle-rename from to)))
-
-;; LINK3res NFSPROC3_LINK(LINK3args)               = 15;
-(defrpc call-link (link-args link-res) 15)
-(defhandler %handle-link (args) 15
-  (with-slots (file link) args
-    (handle-link file link)))
-
-;; READDIR3res NFSPROC3_READDIR(READDIR3args)         = 16;
-(defrpc call-read-dir (read-dir-args read-dir-res) 16)
-(defhandler %handle-read-dir (args) 16
-  (with-slots (dir cookie verf count) args
-    (handle-read-dir dir cookie verf count)))
-
-;; READDIRPLUS3res NFSPROC3_READDIRPLUS(READDIRPLUS3args) = 17;
-(defrpc call-read-dir* (read-dir*-args read-dir*-res) 17)
-(defhandler %handle-read-dir* (args) 17
-  (with-slots (dir cookie verf count max) args
-    (handle-read-dir* dir cookie verf count max)))
-
-;; FSSTAT3res NFSPROC3_FSSTAT(FSSTAT3args)           = 18;
-(defrpc call-fs-stat (fs-stat-args fs-stat-res) 18)
-(defhandler %handle-fs-stat (args) 18
-  (handle-fs-stat args))
-
-;; FSINFO3res NFSPROC3_FSINFO(FSINFO3args)           = 19;
-(defrpc call-fs-info (fs-info-args fs-info-res) 19)
-(defhandler %handle-fs-info (args) 19
-  (handle-fs-info args))
-
-;; PATHCONF3res NFSPROC3_PATHCONF(PATHCONF3args)       = 20;
-(defrpc call-path-conf (path-conf-args path-conf-res) 20)
-(defhandler %handle-path-conf (args) 20
-  (handle-path-conf args))
-
 ;; COMMIT3res NFSPROC3_COMMIT(COMMIT3args)           = 21;
 (defrpc call-commit (commit-args commit-res) 21)
 (defhandler %handle-commit (args) 21
   (with-slots (file offset count) args
-    (handle-commit file offset count)))
+    (declare (ignore file offset count))
+    (make-xunion :ok
+		 (make-commit-res-ok))))
 
