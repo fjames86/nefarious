@@ -13,27 +13,17 @@
 (defconstant +nfs-create-verf-size+ 8)
 (defconstant +nfs-write-verf-size+ 8)
 
+(defparameter *nfs-port* 2049)
 
 ;; typedefs
 
-(defxtype* filename3 ()
-  (:varray :string))
-
-(defxtype* nfs-path3 ()
-  (:varray :string))
-
+(defxtype* filename3 () :string)
+(defxtype* nfs-path3 () :string)
 (defxtype* fileid3 () :uint64)
-
 (defxtype* cookie3 () :uint64)
-
-(defxtype* cookied-verf3 () 
-  (:array :octet +nfs-cookie-verf-size+))
-
-(defxtype* create-verf3 ()
-  (:array :octet +nfs-create-verf-size+))
-
-(defxtype* write-verf3 ()
-  (:array :octet +nfs-write-verf-size+))
+(defxtype* cookied-verf3 () (:array :octet +nfs-cookie-verf-size+))
+(defxtype* create-verf3 () (:array :octet +nfs-create-verf-size+))
+(defxtype* write-verf3 () (:array :octet +nfs-write-verf-size+))
 
 (defxtype* uid3 () :uint32)
 (defxtype* gid3 () :uint32)
@@ -75,12 +65,12 @@
 
 (defxenum ftype3 
   ((:reg 1)
-  (:dir 2)
-  (:blk 3)
-  (:chr 4)
-  (:lnk 5)
-  (:sock 6)
-  (:fifo 7)))
+   (:dir 2)
+   (:blk 3)
+   (:chr 4)
+   (:lnk 5)
+   (:sock 6)
+   (:fifo 7)))
 
 (defxstruct specdata3 ()
   ((data1 :uint32)
@@ -93,27 +83,26 @@
    (nseconds :uint32)))
 
 (defxstruct fattr3 ()
-  ((type ftype3)
-   (mode mode3)
+  ((type ftype3 :reg)
+   (mode mode3 0)
    (nlink :uint32)
-   (uid uid3)
-   (gid gid3)
-   (size size3)
-   (used size3)
+   (uid uid3 0)
+   (gid gid3 0)
+   (size size3 0)
+   (used size3 0)
    (rdev specdata3)
    (fsid :uint64)
-   (fileid fileid3)
-   (atime nfs-time3)
-   (mtime nfs-time3)
-   (ctime nfs-time3)))
+   (fileid fileid3 0)
+   (atime nfs-time3 (make-nfs-time3))
+   (mtime nfs-time3 (make-nfs-time3))
+   (ctime nfs-time3 (make-nfs-time3))))
 
-(defxtype* post-op-attr ()
-  (:optional fattr3))
+(defxtype* post-op-attr () (:optional fattr3))
 
 (defxstruct wcc-attr ()
-  ((size size3)
-   (mtime nfs-time3)
-   (ctime nfs-time3)))
+  ((size size3 0)
+   (mtime nfs-time3 (make-nfs-time3))
+   (ctime nfs-time3 (make-nfs-time3))))
 
 (defxtype* pre-op-attr () (:optional wcc-attr))
 
@@ -129,11 +118,8 @@
    (:set-to-client-time 2)))
 
 (defxtype* set-mode3 () (:optional mode3))
-
 (defxtype* set-uid3 () (:optional uid3))
-
 (defxtype* set-gid3 () (:optional gid3))
-
 (defxtype* set-size3 () (:optional size3))
 
 (defxunion set-atime (time-how)
@@ -149,8 +135,8 @@
    (uid set-uid3)
    (gid set-gid3)
    (size set-size3)
-   (atime set-atime)
-   (mtime set-mtime)))
+   (atime set-atime (make-xunion :dont-change nil))
+   (mtime set-mtime (make-xunion :dont-change nil))))
 
 (defxstruct dir-op-args3 ()
   ((dir nfs-fh3)

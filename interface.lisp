@@ -8,7 +8,7 @@
 
 ;; ------------------------------------------------------
 ;; void NFSPROC3_NULL(void)                    = 0;
-(defrpc call-null (:void :void) 0)
+(defrpc %call-null (:void :void) 0)
 (defhandler %handle-null (void) 0
   (declare (ignore void))
   nil)
@@ -24,8 +24,7 @@
    (otherwise :void)))
 
 (defrpc call-getattr (get-attr-args get-attr-res) 1)
-
-(defhandler handle-getattr (handle) 1
+(defhandler %handle-getattr (handle) 1
   (declare (ignore handle))
   (make-xunion :ok
 	       (make-fattr3 :mode 0
