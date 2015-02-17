@@ -85,9 +85,7 @@
 (defrpc %call-lookup 3
   dir-op-args3 
   (:union nfs-stat3
-    (:ok (:alist (:object nfs-fh3)
-		 (:obj-attrs post-op-attr)
-		 (:dir-attrs post-op-attr)))
+    (:ok (:list nfs-fh3 post-op-attr post-op-attr))
     (otherwise post-op-attr)))
 
 (defun call-lookup (dhandle filename &key (host *nfs-host*) (port *nfs-port*))
@@ -97,9 +95,7 @@
 (defhandler %handle-lookup (arg 3)
   (with-slots (dir name) arg
     (declare (ignore name))
-    (make-xunion :ok 
-		 `((:object . ,dir)
-		   (:obj-attrs) (:dir-attrs)))))
+    (make-xunion :ok (list dir nil nil))))
 
 ;; ------------------------------------------------------
 ;; access -- check access permission
@@ -121,7 +117,7 @@
 (defrpc %call-access 4 
   (:list nfs-fh3 :uint32)
   (:union nfs-stat3 
-    (:ok (:alist (:attrs post-op-attr) (:access :uint32)))
+    (:ok (:list post-op-attr :uint32))
     (otherwise post-op-attr)))
 
 (defun call-access (handle access &key (host *nfs-host*) (port *nfs-port*))
@@ -131,8 +127,7 @@
 (defhandler %handle-access (args 4)
   (destructuring-bind (object access) args
     (declare (ignore object))
-    (make-xunion :ok
-		 `((:attrs . nil) (:access . ,access)))))
+    (make-xunion :ok (list nil access))))
 
 ;; ------------------------------------------------------
 ;; readlink -- read from symbolic link
@@ -141,8 +136,7 @@
 (defrpc %call-readlink 5 
   nfs-fh3
   (:union nfs-stat3
-    (:ok (:alist (:attrs post-op-attr)
-		 (:data nfs-path3)))
+    (:ok (:list post-op-attr nfs-path3))
     (otherwise post-op-attr)))
 
 (defun call-readlink (handle &key (host *nfs-host*) (port *nfs-port*))
@@ -150,9 +144,7 @@
 
 (defhandler %handle-readlink (handle 5)
   (declare (ignore handle))
-  (make-xunion :ok
-	       `((:attrs . nil)
-		 (:data . ""))))
+  (make-xunion :ok (list nil "")))
 
 
 
@@ -163,10 +155,10 @@
 (defrpc %call-read 6 
   (:list nfs-fh3 offset3 count3)
   (:union nfs-stat3
-    (:ok (:alist (:fattrs post-op-attr)
-		 (:count count3)
-		 (:eof :boolean)
-		 (:data (:varray :octet))))
+    (:ok (:list post-op-attr
+		count3
+		:boolean
+		(:varray :octet)))
     (otherwise post-op-attr)))
 
 (defun call-read (handle offset count &key (host *nfs-host*) (port *nfs-port*))
@@ -176,11 +168,8 @@
 (defhandler %handle-read (args 6)
   (destructuring-bind (handle offset count) args
     (declare (ignore handle offset))
-    (make-xunion :ok 
-		 `((:fattrs . nil)
-		   (:count . ,count)
-		   (:eof . t)
-		   (:data . nil)))))
+    (make-xunion :ok (list nil count t nil))))
+
 				 
 ;; ------------------------------------------------------
 ;; write -- write to file
@@ -200,7 +189,7 @@
 (defun call-write (handle offset data &key (host *nfs-host*) (port *nfs-port*) (stable :file-sync))
   (%call-write host (list handle offset (length data) stable data)
 	       :port port))
-					
+
 (defhandler %handle-write (args 7)
   (destructuring-bind (handle offset count stable data) args
     (declare (ignore handle offset count stable data))
@@ -247,13 +236,15 @@
   (%call-create host (list (make-dir-op-args3 :dir dhandle :name filename)
 			   (make-xunion mode 
 					(ecase mode
-					  ((:unchecked :guarded) sattr)
-					  (:exclusive verf))))
+					  ((:unchecked :guarded) 
+					   (or sattr (make-sattr3)))
+					  (:exclusive 
+					   (or verf (make-create-verf3))))))
 		:port port))
 
 (defhandler %handle-create (args 8)
-  (with-slots (where how) args
-    (declare (ignore where how))
+  (destructuring-bind (dirop how) args
+    (declare (ignore dirop how))
     (make-xunion :ok
 		 (list nil nil (make-wcc-data)))))
 
@@ -269,7 +260,7 @@
 
 (defun call-mkdir (dhandle filename &key sattr (host *nfs-host*) (port *nfs-port*))
   (%call-mkdir host (list (make-dir-op-args3 :dir dhandle :name filename)
-			  sattr)
+			  (or sattr (make-sattr3)))
 	       :port port))
 
 (defhandler %handle-mkdir (args 9)
@@ -306,10 +297,9 @@ ATTRS: initial attributes for the symlink."
 			:port port))
 
 (defhandler %handle-create-symlink (args 10)
-  (with-slots (attrs data) args
-    (declare (ignore attrs data))
-    (make-xunion :ok
-		 (make-symlink-res-ok))))
+  (destructuring-bind (dirop attrs path) args
+    (declare (ignore dirop attrs path))
+    (make-xunion :ok (list nil nil (make-wcc-data)))))
 
 ;; ------------------------------------------------------
 ;; mknod -- create special device
@@ -335,10 +325,9 @@ ATTRS: initial attributes for the symlink."
 	       :port port))
 
 (defhandler %handle-mknod (args 11)
-  (with-slots (attrs spec) args
-    (declare (ignore attrs spec))
-    (make-xunion :ok
-		 (list nil nil nil))))
+  (destructuring-bind (dirop spec) args
+    (declare (ignore dirop spec))
+    (make-xunion :ok (list nil nil (make-wcc-data)))))
 
 
 ;; ------------------------------------------------------
@@ -358,7 +347,7 @@ ATTRS: initial attributes for the symlink."
 (defhandler %handle-remove (args 12)
   (with-slots (dir name) args
     (declare (ignore dir name))
-    (make-xunion :ok nil)))
+    (make-xunion :ok (make-wcc-data))))
 	       
 ;; ------------------------------------------------------
 ;; rmdir -- remove a directory 
@@ -371,14 +360,14 @@ ATTRS: initial attributes for the symlink."
     (:ok wcc-data)
     (otherwise wcc-data)))
 
-(defun call-rmdir (dhandle subdirectory &key (host *nfs-host*) (port *nfs-port*))
-  (%call-rmdir host (make-dir-op-args3 :dir dhandle :name subdirectory)
+(defun call-rmdir (dhandle name &key (host *nfs-host*) (port *nfs-port*))
+  (%call-rmdir host (make-dir-op-args3 :dir dhandle :name name)
 	       :port port))
 
 (defhandler %handle-rmdir (args 13)
   (with-slots (dir name) args
     (declare (ignore dir name))
-    (make-xunion :ok nil)))
+    (make-xunion :ok (make-wcc-data))))
 	       
 ;; ------------------------------------------------------
 ;; rename -- rename a file or directory 
@@ -387,7 +376,7 @@ ATTRS: initial attributes for the symlink."
 (defrpc %call-rename 14 
   (:list dir-op-args3 dir-op-args3)
   (:union nfs-stat3
-    (:ok (:list wcc-data wcc-dat))
+    (:ok (:list wcc-data wcc-data))
     (otherwise (:list wcc-data wcc-data))))
 
 (defun call-rename (from-dhandle from-filename to-filename &key to-dhandle (host *nfs-host*) (port *nfs-port*))
@@ -401,8 +390,7 @@ ATTRS: initial attributes for the symlink."
 (defhandler %handle-rename (args 14)
   (destructuring-bind (from to) args
     (declare (ignore from to))
-    (make-xunion :ok
-		 (list nil nil))))
+    (make-xunion :ok (list (make-wcc-data) (make-wcc-data)))))
 
 
 ;; ------------------------------------------------------
@@ -423,8 +411,7 @@ ATTRS: initial attributes for the symlink."
 (defhandler %handle-link (args 15)
   (destructuring-bind (handle dirop) args
     (declare (ignore handle dirop))
-    (make-xunion :ok
-		 (list nil nil))))
+    (make-xunion :ok (list nil (make-wcc-data)))))
 
 ;; ------------------------------------------------------
 ;; read dir -- read from a directory 
@@ -432,7 +419,7 @@ ATTRS: initial attributes for the symlink."
 (defxstruct entry3 ()
   ((fileid fileid3)
    (name filename3)
-   (cookie cookie3)
+   (cookie cookie3 0)
    (next-entry (:optional entry3))))
 
 (defxstruct dir-list3 ()
@@ -446,15 +433,14 @@ ATTRS: initial attributes for the symlink."
     (:ok (:list post-op-attr cookie-verf3 dir-list3))
     (otherwise post-op-attr)))
 
-(defun call-read-dir (dhandle count &key verf cookie (host *nfs-host*) (port *nfs-port*))
-  (%call-read-dir host (list dhandle cookie verf count)
+(defun call-read-dir (dhandle count &key verf (cookie 0) (host *nfs-host*) (port *nfs-port*))
+  (%call-read-dir host (list dhandle cookie (or verf (make-cookie-verf3)) count)
 		  :port port))
 
 (defhandler %handle-read-dir (args 16)
   (destructuring-bind (dhandle cookie verf count) args
     (declare (ignore dhandle cookie verf count))
-    (make-xunion :ok
-		 (list nil nil (make-dir-list3 :eof t)))))
+    (make-xunion :ok (list nil nil (make-dir-list3 :eof t)))))
 
 ;; ------------------------------------------------------
 ;; read dir plus -- extended read from directory 
@@ -469,7 +455,7 @@ ATTRS: initial attributes for the symlink."
 (defxstruct entry3-plus ()
   ((fileid fileid3)
    (name filename3)
-   (cookie cookie3)
+   (cookie cookie3 0)
    (attrs post-op-attr)
    (handle post-op-fh3)
    (next-entry (:optional entry3*))))
@@ -490,16 +476,16 @@ ATTRS: initial attributes for the symlink."
     (:ok (:list post-op-attr cookie-verf3 dir-list3-plus))
     (otherwise post-op-attr)))
 
-(defun call-read-dir-plus (dhandle count &key max cookie verf (host *nfs-host*) (port *nfs-port*))
+(defun call-read-dir-plus (dhandle count &key max (cookie 0) verf (host *nfs-host*) (port *nfs-port*))
   (%call-read-dir-plus host 
-		       (list dhandle cookie verf count (or max count))
+		       (list dhandle cookie (or verf (make-cookie-verf3)) count (or max count))
 		       :port port))
 
 (defhandler %handle-read-dir-plus (args 17)
   (destructuring-bind (dir cookie verf count max) args
-    (declare (ignore dir cookie verf count max))
+    (declare (ignore dir cookie count max))
     (make-xunion :ok 
-		 (list nil nil (make-dir-list3-plus :eof t)))))
+		 (list nil verf (make-dir-list3-plus :eof t)))))
 
 ;; ------------------------------------------------------
 ;; fs stat -- get dynamic filesystem info
@@ -607,5 +593,4 @@ ATTRS: initial attributes for the symlink."
 (defhandler %handle-commit (args 21)
   (destructuring-bind (handle offset count) args
     (declare (ignore handle offset count))
-    (make-xunion :ok (list nil (make-write-verf3)))))
-
+    (make-xunion :ok (list (make-wcc-data) (make-write-verf3)))))
