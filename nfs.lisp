@@ -24,6 +24,8 @@
 (defxtype* cookied-verf3 () (:array :octet +nfs-cookie-verf-size+))
 (defxtype* create-verf3 () (:array :octet +nfs-create-verf-size+))
 (defxtype* write-verf3 () (:array :octet +nfs-write-verf-size+))
+(defun make-write-verf3 ()
+  (make-array +nfs-write-verf-size+))
 
 (defxtype* uid3 () :uint32)
 (defxtype* gid3 () :uint32)

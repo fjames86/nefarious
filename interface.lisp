@@ -3,11 +3,16 @@
 
 (in-package #:nefarious)
 
+(defparameter *nfs-host* "localhost")
+(defparameter *nfs-port* 8000)
+
 (use-rpc-program +nfs-program+ +nfs-version+)
 
 ;; ------------------------------------------------------
 ;; void NFSPROC3_NULL(void)                    = 0;
 (defrpc %call-null 0 :void :void)
+(defun call-null (&key (host *nfs-host*) (port *nfs-port*))
+  (%call-null host nil :port port))
 
 (defhandler %handle-null (void 0)
   (declare (ignore void))
@@ -23,12 +28,15 @@
 ;;  ((:ok get-attr-res-ok)
 ;;   (otherwise :void)))
 
-(defrpc call-getattr 1 
+(defrpc %call-getattr 1 
   nfs-fh3 
   (:union nfs-stat3
     (:ok fattr3)
     (otherwise :void)))
 
+(defun call-getattr (handle &key (host *nfs-host*) (port *nfs-port*))
+  (%call-getattr host handle :port port))
+ 
 (defhandler %handle-getattr (handle 1)
   (declare (ignore handle))
   (make-xunion :ok
@@ -48,17 +56,21 @@
 ;; SETATTR3res NFSPROC3_SETATTR(SETATTR3args)         = 2;
 
 ;; setattr -- set file attributes
-(defxtype* sattr-guard () (:optional nfs-time3))
-(defxstruct set-attr-args ()
-  ((object nfs-fh3)
-   (new-attrs sattr3)
-   (guard sattr-guard)))
+;;(defxtype* sattr-guard () (:optional nfs-time3))
+;;(defxstruct set-attr-args ()
+;;  ((object nfs-fh3)
+;;   (new-attrs sattr3)
+;;   (guard sattr-guard)))
 
-(defrpc call-setattr 2 
+(defrpc %call-setattr 2 
   (:list nfs-fh3 sattr3 (:optional nfs-time3))
   (:union nfs-stat3
     (:ok wcc-data)
     (otherwise wcc-data)))
+
+(defun call-setattr (handle attr &key (host *nfs-host*) (port *nfs-port*) time)
+  (%call-setattr host (list handle attr time) 
+		 :port port))
 
 (defhandler %handle-setattr (args 2)
   (destructuring-bind (handle new-attrs guard) args
@@ -70,27 +82,25 @@
 ;; LOOKUP3res NFSPROC3_LOOKUP(LOOKUP3args)           = 3;
 
 ;; lookup -- lookup filename
-(defxtype* lookup-args () dir-op-args3)
-(defxstruct lookup-res-ok ()
-  ((object nfs-fh3)
-   (obj-attrs post-op-attr)
-   (dir-attrs post-op-attr)))
-(defxtype* lookup-res-fail () post-op-attr)
+(defrpc %call-lookup 3
+  dir-op-args3 
+  (:union nfs-stat3
+    (:ok (:alist (:object nfs-fh3)
+		 (:obj-attrs post-op-attr)
+		 (:dir-attrs post-op-attr)))
+    (otherwise post-op-attr)))
 
-(defxunion lookup-res (nfs-stat3)
-  ((:ok lookup-res-ok)
-   (otherwise lookup-res-fail)))
-
-(defrpc call-lookup 3
-  lookup-args 
-  lookup-res)
+(defun call-lookup (dhandle filename &key (host *nfs-host*) (port *nfs-port*))
+  (%call-lookup host (make-dir-op-args3 :dir dhandle :name filename)
+		:port port))
 
 (defhandler %handle-lookup (arg 3)
   (with-slots (dir name) arg
     (declare (ignore name))
     (make-xunion :ok 
-		 (make-lookup-res-ok :object dir))))
-				   
+		 `((:object . ,dir)
+		   (:obj-attrs) (:dir-attrs)))))
+
 ;; ------------------------------------------------------
 ;; access -- check access permission
 
@@ -104,80 +114,73 @@
   (:delete #x0010)
   (:execute #x0020)))
 
-(defxstruct access-args ()
-  ((object nfs-fh3)
-   (access :uint32)))
+;;(defxstruct access-args ()
+;;  ((object nfs-fh3)
+;;   (access :uint32)))
 
-(defxstruct access-res-ok ()
-  ((obj-attrs post-op-attr)
-   (access :uint32)))
+(defrpc %call-access 4 
+  (:list nfs-fh3 :uint32)
+  (:union nfs-stat3 
+    (:ok (:alist (:attrs post-op-attr) (:access :uint32)))
+    (otherwise post-op-attr)))
 
-(defxtype* access-res-fail () post-op-attr)
-
-(defxunion access-res (nfs-stat3)
-  ((:ok access-res-ok)
-   (otherwise access-res-fail)))
-
-(defrpc call-access 4 access-args access-res)
+(defun call-access (handle access &key (host *nfs-host*) (port *nfs-port*))
+  (%call-access host (list handle access)
+		:port port))
 
 (defhandler %handle-access (args 4)
-  (with-slots (object access) args
-    (declare (ignore object access))
+  (destructuring-bind (object access) args
+    (declare (ignore object))
     (make-xunion :ok
-		 (make-access-res-ok))))
+		 `((:attrs . nil) (:access . ,access)))))
 
 ;; ------------------------------------------------------
 ;; readlink -- read from symbolic link
 ;; READLINK3res NFSPROC3_READLINK(READLINK3args)       = 5;
 
-(defxtype* readlink-args () nfs-fh3)
+(defrpc %call-readlink 5 
+  nfs-fh3
+  (:union nfs-stat3
+    (:ok (:alist (:attrs post-op-attr)
+		 (:data nfs-path3)))
+    (otherwise post-op-attr)))
 
-(defxstruct readlink-res-ok () 
-  ((slink-attrs post-op-attr)
-   (data nfs-path3)))
-
-(defxtype* readlink-res-fail () post-op-attr)
-
-(defxunion readlink-res (nfs-stat3)
-  ((:ok readlink-res-ok)
-   (otherwise readlink-res-fail)))
-
-(defrpc call-readlink 5 readlink-args readlink-res)
+(defun call-readlink (handle &key (host *nfs-host*) (port *nfs-port*))
+  (%call-readlink host handle :port port))
 
 (defhandler %handle-readlink (handle 5)
   (declare (ignore handle))
   (make-xunion :ok
-	       (make-readlink-res-ok :data "")))
+	       `((:attrs . nil)
+		 (:data . ""))))
+
+
 
 ;; ------------------------------------------------------
 ;; read -- read from file
 ;; READ3res NFSPROC3_READ(READ3args)               = 6;
 
-(defxstruct read-args ()
-  ((file nfs-fh3)
-   (offset offset3)
-   (count count3)))
+(defrpc %call-read 6 
+  (:list nfs-fh3 offset3 count3)
+  (:union nfs-stat3
+    (:ok (:alist (:fattrs post-op-attr)
+		 (:count count3)
+		 (:eof :boolean)
+		 (:data (:varray :octet))))
+    (otherwise post-op-attr)))
 
-(defxstruct read-res-ok ()
-  ((fattrs post-op-attr)
-   (count count3)
-   (eof :boolean)
-   (data (:varray :octet))))
-
-(defxtype* read-res-fail () post-op-attr)
-
-(defxunion read-res (nfs-stat3)
-  ((:ok read-res-ok)
-   (otherwise read-res-fail)))
-
-(defrpc call-read 6 read-args read-res)
+(defun call-read (handle offset count &key (host *nfs-host*) (port *nfs-port*))
+  (%call-read host (list handle offset count)
+	      :port port))
 
 (defhandler %handle-read (args 6)
-  (with-slots (file offset count) args
-    (declare (ignore file offset count))
+  (destructuring-bind (handle offset count) args
+    (declare (ignore handle offset))
     (make-xunion :ok 
-		 (make-read-res-ok :count 0
-				   :eof t))))
+		 `((:fattrs . nil)
+		   (:count . ,count)
+		   (:eof . t)
+		   (:data . nil)))))
 				 
 ;; ------------------------------------------------------
 ;; write -- write to file
@@ -188,34 +191,24 @@
    (:data-sync 1)
    (:file-sync 2)))
 
-(defxstruct write-args ()
-  ((file nfs-fh3)
-   (offset offset3)
-   (count count3)
-   (stable stable-how)
-   (opaque (:varray :octet))))
+(defrpc %call-write 7 
+  (:list nfs-fh3 offset3 count3 stable-how (:varray :octet))
+  (:union nfs-stat3
+    (:ok (:list wcc-data count3 stable-how write-verf3))
+    (otherwise wcc-data)))
 
-(defxstruct write-res-ok ()
-  ((file-wcc wcc-data)
-   (count count3)
-   (committed stable-how)
-   (verf write-verf3)))
-
-(defxtype* write-res-fail () wcc-data)
-
-(defxunion write-res (nfs-stat3)
-  ((:ok write-res-ok)
-   (otherwise write-res-fail)))
-
-(defrpc call-write 7 write-args write-res)
-
+(defun call-write (handle offset data &key (host *nfs-host*) (port *nfs-port*) (stable :file-sync))
+  (%call-write host (list handle offset (length data) stable data)
+	       :port port))
+					
 (defhandler %handle-write (args 7)
-  (with-slots (file offset count stable opaque) args
-    (declare (ignore file offset count stable opaque))
+  (destructuring-bind (handle offset count stable data) args
+    (declare (ignore handle offset count stable data))
     (make-xunion :ok
-		 (make-write-res-ok :count 0
-				    :verf (make-array +nfs-write-verf-size+ 
-						      :initial-element 0)))))
+		 (list (make-wcc-data) 
+		       0 
+		       :file-sync 
+		       (make-write-verf3)))))
 
 ;; ------------------------------------------------------
 ;; create -- create a file
@@ -226,86 +219,93 @@
    (:guarded 1)
    (:exclusive 2)))
 
-(defxunion create-how3 (create-mode3)
-  (((:unchecked :guarded) sattr3)
-   (:exclusive create-verf3)))
+;;(defxunion create-how3 (create-mode3)
+;;  (((:unchecked :guarded) sattr3)
+;;   (:exclusive create-verf3)))
+;;(defxstruct create-args ()
+;;  ((where dir-op-args3)
+;;   (how create-how3)))
+;;(defxstruct create-res-ok ()
+;;  ((obj post-op-fh3)
+;;   (obj-attrs post-op-attr)
+;;   (dir-wcc wcc-data)))
+;;(defxtype* create-res-fail () wcc-data)
+;;(defxunion create-res (nfs-stat3)
+;;  ((:ok create-res-ok)
+;;   (otherwise create-res-fail)))
 
-(defxstruct create-args ()
-  ((where dir-op-args3)
-   (how create-how3)))
+(defrpc %call-create 8 
+  (:list dir-op-args3 
+	 (:union create-mode3 
+	   ((:unchecked :guared) sattr3)
+	   (:exclusive created-verf3)))
+  (:union nfs-stat3
+    (:ok (:list post-op-fh3 post-op-attr wcc-data))
+    (otherwise create-res-fail)))
 
-(defxstruct create-res-ok ()
-  ((obj post-op-fh3)
-   (obj-attrs post-op-attr)
-   (dir-wcc wcc-data)))
-
-(defxtype* create-res-fail () wcc-data)
-
-(defxunion create-res (nfs-stat3)
-  ((:ok create-res-ok)
-   (otherwise create-res-fail)))
-
-(defrpc call-create 8 create-args create-res)
+(defun call-create (dhandle filename &key (host *nfs-host*) (port *nfs-port*) (mode :unchecked) sattr verf)
+  (%call-create host (list (make-dir-op-args3 :dir dhandle :name filename)
+			   (make-xunion mode 
+					(ecase mode
+					  ((:unchecked :guarded) sattr)
+					  (:exclusive verf))))
+		:port port))
 
 (defhandler %handle-create (args 8)
   (with-slots (where how) args
     (declare (ignore where how))
     (make-xunion :ok
-		 (make-create-res-ok))))
+		 (list nil nil (make-wcc-data)))))
 
 ;; ------------------------------------------------------
 ;; mkdir -- create a directory 
 ;; MKDIR3res NFSPROC3_MKDIR(MKDIR3args)             = 9;
 
-(defxstruct mkdir-args ()
-  ((where dir-op-args3)
-   (attrs sattr3)))
+(defrpc %call-mkdir 9 
+  (:list dir-op-args3 sattr3) 
+  (:union nfs-stat3
+    (:ok (:list post-op-fh3 post-op-attr wcc-data))
+    (otherwise wcc-data)))
 
-(defxstruct mkdir-res-ok ()
-  ((obj post-op-fh3)
-   (attrs post-op-attr)
-   (dir-wcc wcc-data)))
-
-(defxtype* mkdir-res-fail () wcc-data)
-
-(defxunion mkdir-res (nfs-stat3)
-  ((:ok mkdir-res-ok)
-   (otherwise mkdir-res-fail)))
-
-(defrpc call-mkdir 9 mkdir-args mkdir-res)
+(defun call-mkdir (dhandle filename &key sattr (host *nfs-host*) (port *nfs-port*))
+  (%call-mkdir host (list (make-dir-op-args3 :dir dhandle :name filename)
+			  sattr)
+	       :port port))
 
 (defhandler %handle-mkdir (args 9)
-  (with-slots (where attrs) args
-    (declare (ignore where attrs))
-    (make-xunion :ok 
-		 (make-mkdir-res-ok))))
+  (destructuring-bind (dir-op attrs) args
+    (declare (ignore attrs))
+    (with-slots (dir name) dir-op
+      (declare (ignore dir name))
+      (make-xunion :ok 
+		   (list nil nil (make-wcc-data))))))
 
 ;; ------------------------------------------------------
 ;; symlink -- create a symbolic link
 ;; SYMLINK3res NFSPROC3_SYMLINK(SYMLINK3args)         = 10;
 
-(defxstruct symlink-data3 ()
-  ((attrs sattr3)
-   (data nfs-path3)))
+;;(defxtype* symlink-data3 ()
+;;  (:alist (:attrs sattr3)
+;;	  (:data nfs-path3)))
 
-(defxstruct symlink-args ()
-  ((where dir-op-args3)
-   (slink symlink-data3)))
+(defrpc %call-create-symlink 10 
+  (:list dir-op-args3 sattr3 nfs-path3)
+  (:union nfs-stat3
+    (:ok (:list post-op-fh3 post-op-attr wcc-data))
+    (otherwise wcc-data)))
 
-(defxstruct symlink-res-ok ()
-  ((obj post-op-fh3)
-   (attrs post-op-attr)
-   (data wcc-data)))
+(defun call-create-symlink (dhandle filename path &key attrs (host *nfs-host*) (port *nfs-port*))
+  "DHANDLE: directory handle to create symlink in. 
+FILENAME: name to be associated with the link.
+PATH: the symbolic link data.
+ATTRS: initial attributes for the symlink."
+  (%call-create-symlink host (list (make-dir-op-args3 :dir dhandle 
+						      :name filename)
+				   attrs
+				   path)
+			:port port))
 
-(defxtype* symlink-res-fail () wcc-data)
-
-(defxunion symlink-res (nfs-stat3)
-  ((:ok symlink-res-ok)
-   (otherwise symlink-res-fail)))
-
-(defrpc call-symlink 10 symlink-args symlink-res)
-
-(defhandler %handle-symlink (args 10)
+(defhandler %handle-create-symlink (args 10)
   (with-slots (attrs data) args
     (declare (ignore attrs data))
     (make-xunion :ok
@@ -315,51 +315,46 @@
 ;; mknod -- create special device
 ;; MKNOD3res NFSPROC3_MKNOD(MKNOD3args)             = 11;
 
-(defxstruct device-data3 ()
-  ((attrs sattr3)
-   (spec specdata3)))
+(defrpc %call-mknod 11 
+  (:list dir-op-args3 
+	 (:union ftype3
+	   ((:chr :blk) (:list sattr3 specdata3))
+	   ((:sock :fifo) sattr3)
+	   (otherwise :void)))
+  (:union nfs-stat3 
+    (:ok (:list post-op-fh3 post-op-attr wcc-data))
+    (otherwise wcc-data)))
 
-(defxunion mknod-data3 (ftype3)
-  (((:chr :blk) device-data3)
-   ((:sock :fifo) satt3)
-   (otherwise :void)))
-
-(defxstruct mknod-args ()
-  ((where dir-op-args3)
-   (what mkdor-data3)))
-
-(defxstruct mknod-res-ok ()
-  ((obj post-op-fh3)
-   (attrs post-op-attr)
-   (data wcc-data)))
-
-(defxtype* mknod-res-fail () wcc-data)
-
-(defxunion mknod-res (nfs-stat3)
-  ((:ok mknod-res-ok)
-   (otherwise mknod-res-fail)))
-
-(defrpc call-mknod 11 mknod-args mknod-res)
+(defun call-mknod (dhandle filename &key (host *nfs-host*) (port *nfs-port*) sattr specdata (ftype :reg))
+  (%call-mknod host 
+	       (list (make-dir-op-args3 :dir dhandle :name filename)
+		     (make-xunion ftype
+				  (case ftype
+				    ((:chr :blk) (list sattr specdata))
+				    ((:sock :fifo) sattr))))
+	       :port port))
 
 (defhandler %handle-mknod (args 11)
   (with-slots (attrs spec) args
     (declare (ignore attrs spec))
     (make-xunion :ok
-		 (make-mknod-res-ok))))
+		 (list nil nil nil))))
 
 
 ;; ------------------------------------------------------
 ;; remove -- remove a file
 
-(defxtype* remove-args () dir-op-args3)
-(defxtype* remove-res-ok () wcc-data)
-(defxtype* remove-res-fail () wcc-data)
-(defxunion remove-res (nfs-stat3)
-  ((:ok remove-res-ok)
-   (otherwise remove-res-fail)))
-
 ;; REMOVE3res NFSPROC3_REMOVE(REMOVE3args)           = 12;
-(defrpc call-remove 12 remove-args remove-res)
+(defrpc %call-remove 12 
+  dir-op-args3
+  (:union nfs-stat3
+    (:ok wcc-data)
+    (otherwise wcc-data)))
+
+(defun call-remove (dhandle filename &key (host *nfs-host*) (port *nfs-port*))
+  (%call-remove host (make-dir-op-args3 :dir dhandle :name filename)
+		:port port))
+
 (defhandler %handle-remove (args 12)
   (with-slots (dir name) args
     (declare (ignore dir name))
@@ -368,15 +363,18 @@
 ;; ------------------------------------------------------
 ;; rmdir -- remove a directory 
 
-(defxtype* rmdir-args () dir-op-args3)
-(defxtype* rmdir-res-ok () wcc-data)
-(defxtype* rmdir-res-fail () wcc-data)
-(defxunion rmdir-res (nfs-stat3)
-  ((:ok rmdir-res-ok)
-   (otherwise rmdir-res-fail)))
 
 ;; RMDIR3res NFSPROC3_RMDIR(RMDIR3args)             = 13;
-(defrpc call-rmdir 13 rmdir-args rmdir-res)
+(defrpc %call-rmdir 13 
+  dir-op-args3
+  (:union nfs-stat3
+    (:ok wcc-data)
+    (otherwise wcc-data)))
+
+(defun call-rmdir (dhandle subdirectory &key (host *nfs-host*) (port *nfs-port*))
+  (%call-rmdir host (make-dir-op-args3 :dir dhandle :name subdirectory)
+	       :port port))
+
 (defhandler %handle-rmdir (args 13)
   (with-slots (dir name) args
     (declare (ignore dir name))
@@ -385,67 +383,51 @@
 ;; ------------------------------------------------------
 ;; rename -- rename a file or directory 
 
-(defxstruct rename-args ()
-  ((from dir-op-args3)
-   (to dir-op-args3)))
-
-(defxstruct rename-res-ok ()
-  ((from wcc-data)
-   (to wcc-data)))
-
-(defxstruct rename-res-fail ()
-  ((from wcc-data)
-   (to wcc-data)))
-
-(defxunion rename-res (nfs-stat3)
-  ((:ok rename-res-ok)
-   (otherwise rename-res-fail)))
-
 ;; RENAME3res NFSPROC3_RENAME(RENAME3args)           = 14;
-(defrpc call-rename 14 rename-args rename-res)
+(defrpc %call-rename 14 
+  (:list dir-op-args3 dir-op-args3)
+  (:union nfs-stat3
+    (:ok (:list wcc-data wcc-dat))
+    (otherwise (:list wcc-data wcc-data))))
+
+(defun call-rename (from-dhandle from-filename to-filename &key to-dhandle (host *nfs-host*) (port *nfs-port*))
+  (%call-rename host
+		(list (make-dir-op-args3 :dir from-dhandle 
+					 :name from-filename)
+		      (make-dir-op-args3 :dir (or to-dhandle from-dhandle)
+					 :name to-filename))
+		:port port))
 
 (defhandler %handle-rename (args 14)
-  (with-slots (from to) args
+  (destructuring-bind (from to) args
     (declare (ignore from to))
     (make-xunion :ok
-		 (make-rename-res-ok))))
+		 (list nil nil))))
 
 
 ;; ------------------------------------------------------
 ;; link -- create a link to a file
 
-(defxstruct link-args ()
-  ((file nfs-fh3)
-   (link dir-op-args3)))
-
-(defxstruct link-res-ok ()
-  ((attrs post-op-attr)
-   (data wcc-data)))
-
-(defxstruct link-res-fail () 
-  ((attrs post-op-attr)
-   (data wcc-data)))
-
-(defxunion link-res (nfs-stat3)
-  ((:ok link-res-ok)
-   (otherwise link-res-fail)))
-
 ;; LINK3res NFSPROC3_LINK(LINK3args)               = 15;
-(defrpc call-link 15 link-args link-res)
+(defrpc %call-link 15 
+  (:list nfs-fh3 dir-op-args3)
+  (:union nfs-stat3
+    (:ok (:list post-op-attr wcc-data))
+    (otherwise (:list post-op-attr wcc-data))))
+
+(defun call-link (handle dhandle filename &key (host *nfs-host*) (port *nfs-port*))
+  (%call-link host 
+	      (list handle (make-dir-op-args3 :dir dhandle :name filename))
+	      :port port))
+
 (defhandler %handle-link (args 15)
-  (with-slots (file link) args
-    (declare (ignore file link))
+  (destructuring-bind (handle dirop) args
+    (declare (ignore handle dirop))
     (make-xunion :ok
-		 (make-link-res-ok))))
+		 (list nil nil))))
 
 ;; ------------------------------------------------------
 ;; read dir -- read from a directory 
-
-(defxstruct read-dir-args ()
-  ((dir nfs-fh3)
-   (cookie cookie3)
-   (verf cookie-verf3)
-   (count count3)))
 
 (defxstruct entry3 ()
   ((fileid fileid3)
@@ -457,36 +439,34 @@
   ((entries (:optional entry3))
    (eof :boolean)))
 
-(defxstruct read-dir-res-ok ()
-  ((attrs post-op-attr)
-   (verf cookie-verf3)
-   (reply dir-list3)))
-
-(defxtype* read-dir-res-fail () post-op-attr)
-
-(defxunion read-dir-res (nfs-stat3)
-  ((:ok read-dir-res-ok)
-   (otherwise read-dir-res-fail)))
-  
 ;; READDIR3res NFSPROC3_READDIR(READDIR3args)         = 16;
-(defrpc call-read-dir 16 read-dir-args read-dir-res)
+(defrpc %call-read-dir 16 
+  (:list nfs-fh3 cookie3 cookie-verf3 count3)
+  (:union nfs-stat3
+    (:ok (:list post-op-attr cookie-verf3 dir-list3))
+    (otherwise post-op-attr)))
+
+(defun call-read-dir (dhandle count &key verf cookie (host *nfs-host*) (port *nfs-port*))
+  (%call-read-dir host (list dhandle cookie verf count)
+		  :port port))
+
 (defhandler %handle-read-dir (args 16)
-  (with-slots (dir cookie verf count) args
-    (declare (ignore dir cookie verf count))
+  (destructuring-bind (dhandle cookie verf count) args
+    (declare (ignore dhandle cookie verf count))
     (make-xunion :ok
-		 (make-read-dir-res-ok))))
+		 (list nil nil (make-dir-list3 :eof t)))))
 
 ;; ------------------------------------------------------
 ;; read dir plus -- extended read from directory 
 
-(defxstruct read-dir*-args ()
-  ((dir nfs-fh3)
-   (cookie cookie3)
-   (verf cookie-verf3)
-   (count count3)
-   (max count3)))
+;;(defxstruct read-dir-plus-args ()
+;;  ((dir nfs-fh3)
+;;   (cookie cookie3)
+;;   (verf cookie-verf3)
+;;   (count count3)
+;;   (max count3)))
 
-(defxstruct entry3* ()
+(defxstruct entry3-plus ()
   ((fileid fileid3)
    (name filename3)
    (cookie cookie3)
@@ -494,56 +474,59 @@
    (handle post-op-fh3)
    (next-entry (:optional entry3*))))
 
-(defxstruct dir-list3* ()
-  ((entries (:optional entry3*))
+(defxstruct dir-list3-plus ()
+  ((entries (:optional entry3-plus))
    (eof :boolean)))
 
-(defxstruct read-dir*-res-ok ()
+(defxstruct read-dir-plus-res-ok ()
   ((attrs post-op-attr)
    (cookie cookie-verf3)
    (reply dir-list3*)))
 
-(defxtype* read-dir*-res-fail () post-op-attr)
-
-(defxunion read-dir*-res (nfs-stat3)
-  ((:ok read-dir*-res-ok)
-   (otherwise read-dir*-res-fail)))
-
 ;; READDIRPLUS3res NFSPROC3_READDIRPLUS(READDIRPLUS3args) = 17;
-(defrpc call-read-dir* 17 read-dir*-args read-dir*-res)
-(defhandler %handle-read-dir* (args 17)
-  (with-slots (dir cookie verf count max) args
+(defrpc %call-read-dir-plus 17 
+  (:list nfs-fh3 cookie3 cookie-verf3 count3 count3)
+  (:union nfs-stat3
+    (:ok (:list post-op-attr cookie-verf3 dir-list3-plus))
+    (otherwise post-op-attr)))
+
+(defun call-read-dir-plus (dhandle count &key max cookie verf (host *nfs-host*) (port *nfs-port*))
+  (%call-read-dir-plus host 
+		       (list dhandle cookie verf count (or max count))
+		       :port port))
+
+(defhandler %handle-read-dir-plus (args 17)
+  (destructuring-bind (dir cookie verf count max) args
     (declare (ignore dir cookie verf count max))
     (make-xunion :ok 
-		 (make-read-dir*-res-ok))))
+		 (list nil nil (make-dir-list3-plus :eof t)))))
 
 ;; ------------------------------------------------------
 ;; fs stat -- get dynamic filesystem info
 
-(defxtype* fs-stat-args () nfs-fh3)
-
-(defxstruct fs-stat-res-ok ()
+(defxstruct fs-stat ()
   ((attrs post-op-attr)
-   (tbytes size3)
-   (fbytes size3)
-   (abytes size3)
-   (tfiles size3)
-   (ffiles size3)
-   (afiles size3)
-   (invarsec :uint32)))
-
-(defxtype* fs-stat-res-fail () post-op-attr)
-
-(defxunion fs-stat-res (nfs-stat3)
-  ((:ok fs-stat-res-ok)
-   (otherwise fs-stat-res-fail)))
+   (tbytes size3 0)
+   (fbytes size3 0)
+   (abytes size3 0)
+   (tfiles size3 0)
+   (ffiles size3 0)
+   (afiles size3 0)
+   (invarsec :uint32 0)))
 
 ;; FSSTAT3res NFSPROC3_FSSTAT(FSSTAT3args)           = 18;
-(defrpc call-fs-stat 18 fs-stat-args fs-stat-res)
+(defrpc %call-fs-stat 18 
+  nfs-fh3 
+  (:union nfs-stat3
+    (:ok fs-stat)
+    (otherwise post-op-attr)))
+
+(defun call-fs-stat (handle &key (host *nfs-host*) (port *nfs-port*))
+  (%call-fs-stat host handle :port port))
+
 (defhandler %handle-fs-stat (handle 18)
   (declare (ignore handle))
-  (make-xunion :ok 
-	       (make-fs-stat-res-ok)))
+  (make-xunion :ok (make-fs-stat)))
 
 ;; ------------------------------------------------------
 ;; fs info -- get static file system info
@@ -554,9 +537,7 @@
    (:homogenous #x0008)
    (:cansettime #x0010)))
 
-(defxtype* fs-info-args () nfs-fh3)
-
-(defxstruct fs-info-res-ok ()
+(defxstruct fs-info ()
   ((attrs post-op-attr)
    (rtmax :uint32)
    (rtpref :uint32)
@@ -565,29 +546,28 @@
    (wrpref :uint32)
    (wtmulf :uint32)
    (dtpref :uint32)
-   (max-fsize size3)
-   (time-delta nfs-time3)
-   (properties :uint32)))
-
-(defxtype* fs-info-res-fail () post-op-attr)
-
-(defxunion fs-info-res (nfs-stat3)
-  ((:ok fs-info-res-ok)
-   (otherwise fs-info-res-fail)))
+   (max-fsize size3 0)
+   (time-delta nfs-time3 (make-nfs-time3))
+   (properties :uint32 0)))
 
 ;; FSINFO3res NFSPROC3_FSINFO(FSINFO3args)           = 19;
-(defrpc call-fs-info 19 fs-info-args fs-info-res)
+(defrpc %call-fs-info 19 
+  nfs-fh3 
+  (:union nfs-stat3
+    (:ok fs-info)
+    (otherwise post-op-attr)))
+
+(defun call-fs-info (handle &key (host *nfs-host*) (port *nfs-port*))
+  (%call-fs-info host handle :port port))
+
 (defhandler %handle-fs-info (handle 19)
   (declare (ignore handle))
-  (make-xunion :ok
-	       (make-fs-info-res-ok)))
+  (make-xunion :ok (make-fs-info)))
 
 ;; ------------------------------------------------------
 ;; pstconf -- retrieve posix information
 
-(defxtype* path-conf-args () nfs-fh3)
-
-(defxstruct path-conf-res-ok ()
+(defxstruct path-conf ()
   ((attr post-op-attr)
    (link-max :uint32)
    (name-max :uint32)
@@ -596,42 +576,36 @@
    (case-insensitive :boolean)
    (case-preserving :boolean)))
 
-(defxtype* path-conf-res-fail () post-op-attr)
-
-(defxunion post-conf-res (nfs-stat3)
-  ((:ok path-conf-res-ok)
-   (otherwise path-conf-res-fail)))
-
 ;; PATHCONF3res NFSPROC3_PATHCONF(PATHCONF3args)       = 20;
-(defrpc call-path-conf 20 path-conf-args path-conf-res)
+(defrpc %call-path-conf 20 
+  nfs-fh3
+  (:union nfs-stat3
+    (:ok path-conf)
+    (otherwise post-op-attr)))
+
+(defun call-path-conf (handle &key (host *nfs-host*) (port *nfs-port*))
+  (%call-path-conf host handle :port port))
+
 (defhandler %handle-path-conf (handle 20)
   (declare (ignore handle))
-  (make-xunion :ok
-	       (make-path-conf-res-ok)))
+  (make-xunion :ok (make-path-conf)))
+
 
 ;; ------------------------------------------------------
 ;; commit -- commit cached data on a server to stable storage
 
-(defxstruct commit-args ()
-  ((file nfs-fh3)
-   (offset offset3)
-   (count count3)))
-
-(defxstruct commit-res-ok ()
-  ((data wcc-data)
-   (verf write-verf3)))
-
-(defxtype* commit-res-fail () wcc-data)
-
-(defxunion commit-res (nfs-stat3)
-  ((:ok commit-res-ok)
-   (otherwise commit-res-fail)))
-
 ;; COMMIT3res NFSPROC3_COMMIT(COMMIT3args)           = 21;
-(defrpc call-commit 21 commit-args commit-res)
+(defrpc %call-commit 21 
+  (:list nfs-fh3 offset3 count3)
+  (:union nfs-stat3
+    (:ok (:list wcc-data write-verf3))
+    (otherwise wcc-data)))
+
+(defun call-commit (handle offset count &key (host *nfs-host*) (port *nfs-port*))
+  (%call-commit host (list handle offset count) :port port))
+
 (defhandler %handle-commit (args 21)
-  (with-slots (file offset count) args
-    (declare (ignore file offset count))
-    (make-xunion :ok
-		 (make-commit-res-ok))))
+  (destructuring-bind (handle offset count) args
+    (declare (ignore handle offset count))
+    (make-xunion :ok (list nil (make-write-verf3)))))
 
