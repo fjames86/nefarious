@@ -3,20 +3,19 @@
 
 (defpackage #:nefarious.mount
   (:use #:cl #:frpc)
-  (:export #:call-mount-null
-	   #:call-mount-mount
-	   #:call-mount-dump
-	   #:call-mount-unmount
-	   #:call-mount-unmount-all
-	   #:call-mount-export))
+  (:export #:call-null
+	   #:call-mount
+	   #:call-dump
+	   #:call-unmount
+	   #:call-unmount-all
+	   #:call-export))
 
 (in-package #:nefarious.mount)
 
 (defconstant +mount-program+ 100005)
 (defconstant +mount-version+ 3)
 
-(use-rpc-program +mount-program+)
-(use-rpc-version +mount-version+)
+(use-rpc-program +mount-program+ +mount-version+)
 
 (defconstant +mount-path-len+ 1024)
 (defconstant +mount-name-len+ 255)
@@ -38,21 +37,27 @@
    (:not-supp 10004)
    (:server-fault 10006)))
 
+(defparameter *mount-host* "localhost")
+(defparameter *mount-port* 8000)
+
 ;; -----------------------------------------------------
 ;; for testing connections 
-(defrpc call-mount-null (:void :void) 0)
+(defrpc %call-null 0 :void :void)
+(defun call-null (&key (host *mount-host*) (port *mount-port*))
+  (%call-null host nil :port port))
 
 ;; -----------------------------------------------------
 ;; mount 
-(defxstruct mount-res-ok ()
-  ((fhandle fhandle3)
-   (auth-flavours (:varray :int32))))
 
-(defxunion mount-res (mount-stat3)
-  ((:ok mount-res-ok)
-   (otherwise :void)))
+(defrpc %call-mount 1
+  dir-path
+  (:union mount-stat3
+    (:ok (:list fhandle3 (:varray :int32)))
+    (otherwise :void)))
 
-(defrpc call-mount-mount (dir-path mount-res3) 1)
+(defun call-mount (dpath &key (host *mount-host*) (port *mount-port*))
+  (%call-mount host dpath :port port))
+
 
 ;; -----------------------------------------------------
 ;; dump -- return mount entries
@@ -64,16 +69,21 @@
    (directory dir-path)
    (next mount-list)))
 
-(defrpc call-mount-dump (:void mount-list) 2)
-
+(defrpc %call-dump 2 :void mount-list)
+(defun call-dump (&key (host *mount-host*) (port *mount-port*))
+  (%call-dump host nil :port port))
 
 ;; -----------------------------------------------------
 ;; unmount -- remove mount entry 
-(defrpc call-mount-unmount (dir-path :void) 3)
+(defrpc %call-unmount 3 dir-path :void)
+(defun call-unmount (dpath &key (host *mount-host*) (port *mount-port*))
+  (%call-unmount host dpath :port port))
 
 ;; -----------------------------------------------------
 ;; unmount all -- remove all mount entries
-(defrpc call-mount-unmount-all (:void :void) 4)
+(defrpc %call-unmount-all 4 :void :void)
+(defun call-unmount-all (&key (host *mount-host*) (port *mount-port*))
+  (%call-unmount-all host nil :port port))
 
 ;; -----------------------------------------------------
 ;; export -- return export list 
@@ -90,6 +100,18 @@
    (groups groups)
    (next exports)))
 
-(defrpc call-mount-export (:void exports) 5)
+(defrpc %call-export 5 :void exports)
+(defun call-export (&key (host *mount-host*) (port *mount-port*))
+  (do ((enodes (%call-export host nil :port port) (export-node-next enodes))
+	(elist nil))
+      ((null enodes) elist)
+    (push (list (cons :dir (export-node-dir enodes))
+		(cons :groups 
+		      (do ((groups (export-node-groups enodes) (group-node-next groups))
+			   (glist nil))
+			  ((null groups) glist)
+			(push (group-node-name groups) glist))))
+	  elist)))
+
 
 
