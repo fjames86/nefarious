@@ -11,6 +11,7 @@
   ((:file "package")
    (:file "nfs" :depends-on ("package"))
    (:file "interface" :depends-on ("nfs"))
-   (:file "server" :depends-on ("package")))
+   (:file "server" :depends-on ("package"))
+   (:file "mount"))
   :depends-on (:frpc))
 
