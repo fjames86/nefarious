@@ -3,6 +3,7 @@
 
 (defpackage #:nefarious.mount
   (:use #:cl #:frpc)
+  (:nicknames #:nfs.mount)
   (:export #:call-null
 	   #:call-mount
 	   #:call-dump
@@ -21,7 +22,7 @@
 (defconstant +mount-name-len+ 255)
 (defconstant +mount-fh-size3+ 64)
 
-(defxtype* fhandle3 () (:varray :octet +mount-fh-size3+))
+(defxtype* fhandle3 () (:varray* :octet +mount-fh-size3+))
 (defxtype* dir-path () :string)
 (defxtype* name () :string)
 
@@ -38,7 +39,7 @@
    (:server-fault 10006)))
 
 (defparameter *mount-host* "localhost")
-(defparameter *mount-port* 8000)
+(defparameter *mount-port* 635)
 
 ;; -----------------------------------------------------
 ;; for testing connections 

@@ -4,7 +4,7 @@
 (in-package #:nefarious)
 
 (defparameter *nfs-host* "localhost")
-(defparameter *nfs-port* 8000)
+(defparameter *nfs-port* 2049)
 
 (use-rpc-program +nfs-program+ +nfs-version+)
 
@@ -419,11 +419,14 @@ ATTRS: initial attributes for the symlink."
 (defxstruct entry3 ()
   ((fileid fileid3)
    (name filename3)
-   (cookie cookie3 0)
-   (next-entry (:optional entry3))))
+   (cookie cookie3 0)))
+
+(defxstruct %entry3 ()
+  ((entry entry3)
+   (next-entry (:optional %entry3))))
 
 (defxstruct dir-list3 ()
-  ((entries (:optional entry3))
+  ((entries (:optional %entry3))
    (eof :boolean)))
 
 ;; READDIR3res NFSPROC3_READDIR(READDIR3args)         = 16;
@@ -433,9 +436,21 @@ ATTRS: initial attributes for the symlink."
     (:ok (:list post-op-attr cookie-verf3 dir-list3))
     (otherwise post-op-attr)))
 
-(defun call-read-dir (dhandle count &key verf (cookie 0) (host *nfs-host*) (port *nfs-port*))
-  (%call-read-dir host (list dhandle cookie (or verf (make-cookie-verf3)) count)
-		  :port port))
+(defun call-read-dir (dhandle &key verf (cookie 0) (count 65536) (host *nfs-host*) (port *nfs-port*))
+  (let ((res (%call-read-dir host (list dhandle cookie (or verf (make-cookie-verf3)) count)
+			     :port port)))
+    (if (eq (xunion-tag res) :ok)
+	(destructuring-bind (attr cverf dlist) (xunion-val res)
+	  (list attr cverf 
+		(make-dir-list3 
+		 :eof (dir-list3-eof dlist)
+		 :entries
+		 (do ((entries (dir-list3-entries dlist) (%entry3-next-entry entries))
+		      (elist nil))
+		     ((null entries) elist)
+		   (push (%entry3-entry entries) elist)))))
+	res)))
+		
 
 (defhandler %handle-read-dir (args 16)
   (destructuring-bind (dhandle cookie verf count) args

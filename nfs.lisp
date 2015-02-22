@@ -82,7 +82,7 @@
   ((data1 :uint32)
    (data2 :uint32)))
 
-(defxtype* nfs-fh3 () (:varray :octet +nfs-fh-size+))
+(defxtype* nfs-fh3 () (:varray* :octet +nfs-fh-size+))
 
 (defxstruct nfs-time3 ()
   ((seconds :uint32)
