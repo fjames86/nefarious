@@ -9,7 +9,8 @@
 	   #:call-dump
 	   #:call-unmount
 	   #:call-unmount-all
-	   #:call-export))
+	   #:call-export
+	   #:*mount-port*))
 
 (in-package #:nefarious.mount)
 
@@ -47,6 +48,10 @@
 (defun call-null (&key (host *mount-host*) (port *mount-port*))
   (%call-null host nil :port port))
 
+(defhandler %handle-null (void 0)
+  (declare (ignore void))
+  nil)
+
 ;; -----------------------------------------------------
 ;; mount 
 
@@ -59,6 +64,10 @@
 (defun call-mount (dpath &key (host *mount-host*) (port *mount-port*))
   (%call-mount host dpath :port port))
 
+(defhandler %handle-mount (dpath 1)
+  (declare (ignore dpath))
+  (make-xunion :ok 
+	       (list nil nil)))
 
 ;; -----------------------------------------------------
 ;; dump -- return mount entries
@@ -74,17 +83,29 @@
 (defun call-dump (&key (host *mount-host*) (port *mount-port*))
   (%call-dump host nil :port port))
 
+(defhandler %handle-dump (void 2)
+  (declare (ignore void))
+  nil)
+
 ;; -----------------------------------------------------
 ;; unmount -- remove mount entry 
 (defrpc %call-unmount 3 dir-path :void)
 (defun call-unmount (dpath &key (host *mount-host*) (port *mount-port*))
   (%call-unmount host dpath :port port))
 
+(defhandler %handle-unmount (dpath 3)
+  (declare (ignore dpath))
+  nil)
+
 ;; -----------------------------------------------------
 ;; unmount all -- remove all mount entries
 (defrpc %call-unmount-all 4 :void :void)
 (defun call-unmount-all (&key (host *mount-host*) (port *mount-port*))
   (%call-unmount-all host nil :port port))
+
+(defhandler %handle-unmount-all (void 4)
+  (declare (ignore void))
+  nil)
 
 ;; -----------------------------------------------------
 ;; export -- return export list 
@@ -114,5 +135,6 @@
 			(push (group-node-name groups) glist))))
 	  elist)))
 
-
-
+(defhandler %handle-export (void 5)
+  (declare (ignore void))
+  nil)

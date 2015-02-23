@@ -14,23 +14,39 @@
 ;; the client in the form of handles
 ;; 
 
+(defparameter *nfs-handles* nil)
 
 (defstruct (handle (:constructor %make-handle))
-  fh ;; nfs file handle 
-  hash ;; pathname hash
-  pathname
-  parent
-  children)
+  hash
+  nfs-fh
+  pathname)
 
 (defun make-handle (pathname)
   (let ((hash (sxhash pathname)))
-    (%make-handle 
-     :pathname pathname
-     :hash hash
-     :fh (let ((h (nibbles:make-octet-vector +nefarious-handle-size+)))
-	   (setf (nibbles:ub64ref/be h 0) 
-		 hash)
-	   h))))
+    (%make-handle :hash hash
+		  :nfs-fh (let ((v (nibbles:make-octet-vector 8)))
+			    (setf (nibbles:ub64ref/be v 0) hash)
+			    v)
+		  :pathname pathname)))
+
+(defun allocate-handle (pathname)
+  (unless (cl-fad:file-exists-p pathname)
+    (error "File doesn't exist"))
+  (let ((h (make-handle pathname)))
+    (push h *nfs-handles*)
+    h))
+
+(defun find-handle (&key nfs-fh pathname)
+  (cond
+    (nfs-fh
+     (find-if (lambda (handle)
+		(every #'= (handle-nfs-fh handle) nfs-fh))
+	      *nfs-handles*))
+    (pathname
+     (find-if (lambda (handle)
+		(equal (handle-pathname handle) pathname))
+	      *nfs-handles*))
+    (t (error "Must supply an nfs-fh or pathname"))))
 
 ;; the list of top-level directories that we export i.e. that are shared
 ;; using nfs

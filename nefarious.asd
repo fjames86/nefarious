@@ -8,7 +8,8 @@
   :description "NFS library"
   :license "MIT"
   :components
-  ((:file "package")
+  ((:file "mount")
+   (:file "package" :depends-on ("mount"))
    (:file "nfs" :depends-on ("package"))
    (:file "interface" :depends-on ("nfs"))
    (:file "server" :depends-on ("package"))

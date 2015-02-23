@@ -1,6 +1,7 @@
 
 (defpackage #:nefarious.nlm4
   (:use #:cl #:frpc)
+  (:nicknames #:nfs.nlm)
   (:export #:call-nlm4-null
 	   #:call-nlm4-test
 	   #:call-nlm4-lock
