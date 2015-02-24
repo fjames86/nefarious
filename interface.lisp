@@ -158,7 +158,7 @@
     (:ok (:list post-op-attr
 		count3
 		:boolean
-		(:varray :octet)))
+		(:varray* :octet)))
     (otherwise post-op-attr)))
 
 (defun call-read (handle offset count &key (host *nfs-host*) (port *nfs-port*))
@@ -181,7 +181,7 @@
    (:file-sync 2)))
 
 (defrpc %call-write 7 
-  (:list nfs-fh3 offset3 count3 stable-how (:varray :octet))
+  (:list nfs-fh3 offset3 count3 stable-how (:varray* :octet))
   (:union nfs-stat3
     (:ok (:list wcc-data count3 stable-how write-verf3))
     (otherwise wcc-data)))
