@@ -25,6 +25,8 @@
 	  #:call-fs-stat
 	  #:call-fs-info
 	  #:call-path-conf
-	  #:call-commit))
+	  #:call-commit
+	  #:start
+	  #:stop))
 
 

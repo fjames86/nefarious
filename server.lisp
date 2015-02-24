@@ -11,8 +11,6 @@
   (setf *server* (make-rpc-server))
   (let ((tcp-ports (list pmap:*pmap-port* *nfs-port* nfs.mount:*mount-port*))
 	(udp-ports nil))
-    ;; tell the port mapper about the NFS ports
-    (pmap:add-all-mappings tcp-ports udp-ports)
     (start-rpc-server *server* 
 		      :tcp-ports tcp-ports
 		      :udp-ports udp-ports)))

@@ -19,10 +19,17 @@ See its sister project, FRPC, for the underlying ONCRPC implementation details.
 3. Client
 ----------
 
-The various CALL- functions exported from the NEFARIOUS package provide client functionality. At present it's in 
-a rather raw form, but appears to be reasonably functional. 
+The various CALL- functions exported from the NEFARIOUS package provide client functionality. 
+The client is working and has been used to mount, create, read, write and delete files. More work 
+needs to be done to make the client functionality easier and more useful. This might include defining
+a new stream type to make reading/writing remote files seamless.
 
-3. License
+4. Server 
+-----------
+
+The NFS server stubs have been typed in but are not yet functioning.
+
+5. License
 ------------
 
 Released under the terms of the MIT license.
