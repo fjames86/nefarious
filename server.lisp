@@ -6,8 +6,9 @@
 ;; the server 
 (defvar *server* nil)
 
-(defun start ()
+(defun start (export-directory)
   "Start the NFS server."
+  (export-directory export-directory)
   (setf *server* (make-rpc-server))
   (let ((tcp-ports (list pmap:*pmap-port* *nfs-port* nfs.mount:*mount-port*))
 	(udp-ports nil))

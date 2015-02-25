@@ -2,59 +2,134 @@
 
 (in-package #:nefarious)
 
-(defconstant +nefarious-handle-size+ 32)
-
-;; we have at least 32 bytes to play with in our file handle (possibily up to 64)
-;; what should we store in it?
-;; traditionally you would store device, inode and generation numbers
-;; but we don't really have access to these.
-;; you need a system like this so that the handle contains all the information
-;; to find the file, meaning you don't need to hold a cache mapping handles to files
-;; this is what allows the protocol to be stateless, since all the state is held by 
-;; the client in the form of handles
-;; 
-
-(defparameter *nfs-handles* nil)
+(defparameter *handles* nil)
 
 (defstruct (handle (:constructor %make-handle))
   hash
-  nfs-fh
-  pathname)
+  fh ;; nfs file handle
+  pathname
+  directory-p
+  parent ;; nfs directory handle of the parent (or nil if toplevel export directory)
+  children) ;; nfs handles of children
 
-(defun make-handle (pathname)
-  (let ((hash (sxhash pathname)))
-    (%make-handle :hash hash
-		  :nfs-fh (let ((v (nibbles:make-octet-vector 8)))
-			    (setf (nibbles:ub64ref/be v 0) hash)
-			    v)
-		  :pathname pathname)))
+(defun make-handle (dhandle name)
+  (declare (type handle dhandle)
+	   (type string name))
+  (let* ((pathname (cl-fad:merge-pathnames-as-file (handle-pathname dhandle)
+						   name))
+	 (hash (sxhash pathname))
+	 (handle 
+	  (%make-handle :hash hash
+			:fh (let ((v (nibbles:make-octet-vector 8)))
+			      (setf (nibbles:ub64ref/be v 0) hash)
+			      v)
+			:pathname pathname
+			:parent (handle-fh dhandle)
+			:directory-p (and (cl-fad:directory-pathname-p pathname)
+					  (cl-fad:directory-exists-p pathname)
+					  t))))
+    handle))
 
-(defun allocate-handle (pathname)
-  (unless (cl-fad:file-exists-p pathname)
-    (error "File doesn't exist"))
-  (let ((h (make-handle pathname)))
-    (push h *nfs-handles*)
-    h))
+(defun make-dhandle (dhandle name)
+  (declare (type handle dhandle)
+	   (type string name))
+  (let* ((pathname (cl-fad:merge-pathnames-as-directory (handle-pathname dhandle)
+							name))
+	 (hash (sxhash pathname))
+	 (handle 
+	  (%make-handle :hash hash
+			:fh (let ((v (nibbles:make-octet-vector 8)))
+			      (setf (nibbles:ub64ref/be v 0) hash)
+			      v)
+			:pathname pathname
+			:parent (handle-fh dhandle)
+			:directory-p (and (cl-fad:directory-pathname-p pathname)
+					  (cl-fad:directory-exists-p pathname)
+					  t))))
+    handle))
 
-(defun find-handle (&key nfs-fh pathname)
-  (cond
-    (nfs-fh
-     (find-if (lambda (handle)
-		(every #'= (handle-nfs-fh handle) nfs-fh))
-	      *nfs-handles*))
-    (pathname
-     (find-if (lambda (handle)
-		(equal (handle-pathname handle) pathname))
-	      *nfs-handles*))
-    (t (error "Must supply an nfs-fh or pathname"))))
+(defun make-export-handle (export-path)
+  (let* ((pathname (cl-fad:pathname-as-directory export-path))
+	 (hash (sxhash pathname))
+	 (handle 
+	  (%make-handle :hash hash
+			:fh (let ((v (nibbles:make-octet-vector 8)))
+			      (setf (nibbles:ub64ref/be v 0) hash)
+			      v)
+			:pathname pathname
+			:directory-p (and (cl-fad:directory-pathname-p pathname)
+					  (cl-fad:directory-exists-p pathname)
+					  t))))
+    handle))
 
-;; the list of top-level directories that we export i.e. that are shared
-;; using nfs
-(defparameter *exports* nil)
+(defun find-handle (fh)
+  (find-if (lambda (handle)
+	     (equalp (handle-fh handle) fh))
+	   *handles*))
 
-(defun export-handles (directory)
-  (let ((handles nil))
-    (cl-fad:walk-directory directory 
-			   (lambda (pathname)
-			     (push (make-handle pathname) handles)))
-    handles))
+(defun allocate-handle (dhandle name)
+  (let ((handle (make-handle dhandle name)))
+    ;; if the file does not exist then error
+    (unless (cl-fad:file-exists-p (handle-pathname handle))
+      (return-from allocate-handle nil))
+
+    ;; the file exists, push it onto the list and the parent's children list
+    (push handle *handles*)
+    (push (handle-fh handle) (handle-children dhandle))
+    handle))
+
+(defun allocate-dhandle (dhandle name)
+  (let ((handle (make-dhandle dhandle name)))
+    (unless (cl-fad:directory-exists-p (handle-pathname handle))
+      (return-from allocate-dhandle nil))
+    (push handle *handles*)
+    (push handle (handle-children dhandle))
+    handle))
+
+(defun export-directory (path)
+  (let ((handle (make-export-handle path)))
+    (push handle *handles*)
+    handle))
+
+
+;; ----------- file operations -------------------
+
+
+(defun read-file (handle offset count)
+  (with-open-file (f (handle-pathname handle) 
+		     :direction :input
+		     :element-type '(unsigned-byte 8))
+    (file-position f offset)
+    (let ((buffer (nibbles:make-octet-vector count)))
+      (let ((n (read-sequence buffer f)))
+	(subseq buffer 0 n)))))
+
+(defun write-file (handle offset buffer)
+  (with-open-file (f (handle-pathname handle)
+		     :direction :output
+		     :if-does-not-exist :error
+		     :element-type '(unsigned-byte 8))
+    (file-position f offset)
+    (length (write-sequence buffer f))))
+
+(defun create-file (dhandle name)
+  (let ((handle (make-handle dhandle name)))
+    (with-open-file (f (handle-pathname handle)
+		       :direction :output 
+		       :if-exists :error
+		       :if-does-not-exist :create)))
+  (allocate-handle dhandle name))
+
+(defun remove-file (dhandle name)
+  (let ((handle (make-handle dhandle name)))
+    (delete-file (handle-pathname handle))))
+
+(defun create-directory (dhandle name)
+  (let ((handle (allocate-dhandle dhandle name)))
+    (when handle
+      (ensure-directories-exist (handle-pathname handle))
+      handle)))
+
+(defun remove-directory (dhandle name)
+  (let ((handle (make-dhandle dhandle name)))    
+    (cl-fad:delete-directory-and-files (handle-pathname handle))))

@@ -37,19 +37,21 @@
 (defun call-getattr (handle &key (host *nfs-host*) (port *nfs-port*))
   (%call-getattr host handle :port port))
  
-(defhandler %handle-getattr (handle 1)
-  (declare (ignore handle))
-  (make-xunion :ok
-	       (make-fattr3 :mode 0
-			    :uid 0
-			    :gid 0
-			    :size 0
-			    :used 0
-			    :rdev (make-specdata3)
-			    :fileid 0
-			    :atime (make-nfs-time3)
-			    :mtime (make-nfs-time3)
-			    :ctime (make-nfs-time3))))
+(defhandler %handle-getattr (fh 1)
+  (let ((handle (find-handle fh)))
+    (if handle
+	(make-xunion :ok
+		     (make-fattr3 :mode 0
+				  :uid 0
+				  :gid 0
+				  :size 0
+				  :used 0
+				  :rdev (make-specdata3)
+				  :fileid 0
+				  :atime (make-nfs-time3)
+				  :mtime (make-nfs-time3)
+				  :ctime (make-nfs-time3)))
+	(make-xunion :bad-handle nil))))
 
 
 ;; ------------------------------------------------------
@@ -73,8 +75,8 @@
 		 :port port))
 
 (defhandler %handle-setattr (args 2)
-  (destructuring-bind (handle new-attrs guard) args
-    (declare (ignore handle new-attrs guard))
+  (destructuring-bind (fh new-attrs guard) args
+    (declare (ignore fh new-attrs guard))
     (make-xunion :ok (make-wcc-data))))
 
 
@@ -94,8 +96,16 @@
 
 (defhandler %handle-lookup (arg 3)
   (with-slots (dir name) arg
-    (declare (ignore name))
-    (make-xunion :ok (list dir nil nil))))
+    (let ((dhandle (find-handle dir)))
+      (if dhandle
+	  (let ((handle (allocate-handle dhandle name)))
+	    (if handle
+		(make-xunion :ok
+			     (list (handle-fh handle)
+				   nil
+				   nil))
+		(make-xunion :noent nil)))
+	  (make-xunion :bad-handle nil)))))
 
 ;; ------------------------------------------------------
 ;; access -- check access permission
@@ -166,11 +176,19 @@
 	      :port port))
 
 (defhandler %handle-read (args 6)
-  (destructuring-bind (handle offset count) args
-    (declare (ignore handle offset))
-    (make-xunion :ok (list nil count t nil))))
+  (destructuring-bind (fh offset count) args
+    (let ((handle (find-handle fh)))
+      (if handle
+	  (let ((buffer (read-file handle offset count)))
+	    (make-xunion :ok
+			 (list nil
+			       (length buffer)
+			       (if (< (length buffer) count)
+				   t
+				   nil)
+			       buffer)))
+	  (make-xunion :bad-handle nil)))))
 
-				 
 ;; ------------------------------------------------------
 ;; write -- write to file
 ;; WRITE3res NFSPROC3_WRITE(WRITE3args)             = 7;
@@ -191,13 +209,20 @@
 	       :port port))
 
 (defhandler %handle-write (args 7)
-  (destructuring-bind (handle offset count stable data) args
-    (declare (ignore handle offset count stable data))
-    (make-xunion :ok
-		 (list (make-wcc-data) 
-		       0 
-		       :file-sync 
-		       (make-write-verf3)))))
+  (destructuring-bind (fh offset count stable data) args
+    (declare (ignore stable))
+    (declare (ignore count))
+    (let ((handle (find-handle fh)))
+      (if handle
+	  (let ((length (write-file handle offset data)))
+	    (make-xunion :ok
+			 (list (make-wcc-data)
+			       length
+			       :file-sync
+			       nil)))
+	  (make-xunion :bad-handle nil)))))
+	    
+
 
 ;; ------------------------------------------------------
 ;; create -- create a file
@@ -230,7 +255,7 @@
 	   (:exclusive created-verf3)))
   (:union nfs-stat3
     (:ok (:list post-op-fh3 post-op-attr wcc-data))
-    (otherwise create-res-fail)))
+    (otherwise wcc-data)))
 
 (defun call-create (dhandle filename &key (host *nfs-host*) (port *nfs-port*) (mode :unchecked) sattr verf)
   (%call-create host (list (make-dir-op-args3 :dir dhandle :name filename)
@@ -244,9 +269,15 @@
 
 (defhandler %handle-create (args 8)
   (destructuring-bind (dirop how) args
-    (declare (ignore dirop how))
-    (make-xunion :ok
-		 (list nil nil (make-wcc-data)))))
+    (declare (ignore how))
+    (with-slots (dir name) dirop
+      (let ((handle (create-file dir name)))
+	(if handle
+	    (make-xunion :ok
+			 (list (handle-fh handle)
+			       nil
+			       (make-wcc-data)))
+	    (make-xunion :noent (make-wcc-data)))))))
 
 ;; ------------------------------------------------------
 ;; mkdir -- create a directory 
@@ -267,9 +298,16 @@
   (destructuring-bind (dir-op attrs) args
     (declare (ignore attrs))
     (with-slots (dir name) dir-op
-      (declare (ignore dir name))
-      (make-xunion :ok 
-		   (list nil nil (make-wcc-data))))))
+      (let ((dhandle (find-handle dir)))
+	(if dhandle 
+	    (let ((handle (create-directory dhandle name)))
+	      (if handle
+		  (make-xunion :ok
+			       (list (handle-fh handle)
+				     nil
+				     (make-wcc-data)))
+		  (make-xunion :server-fault (make-wcc-data))))
+	    (make-xunion :bad-handle (make-wcc-data)))))))
 
 ;; ------------------------------------------------------
 ;; symlink -- create a symbolic link
@@ -296,10 +334,10 @@ ATTRS: initial attributes for the symlink."
 				   path)
 			:port port))
 
-(defhandler %handle-create-symlink (args 10)
-  (destructuring-bind (dirop attrs path) args
-    (declare (ignore dirop attrs path))
-    (make-xunion :ok (list nil nil (make-wcc-data)))))
+;;(defhandler %handle-create-symlink (args 10)
+;;  (destructuring-bind (dirop attrs path) args
+;;    (declare (ignore dirop attrs path))
+;;    (make-xunion :ok (list nil nil (make-wcc-data)))))
 
 ;; ------------------------------------------------------
 ;; mknod -- create special device
@@ -324,10 +362,11 @@ ATTRS: initial attributes for the symlink."
 				    ((:sock :fifo) sattr))))
 	       :port port))
 
-(defhandler %handle-mknod (args 11)
-  (destructuring-bind (dirop spec) args
-    (declare (ignore dirop spec))
-    (make-xunion :ok (list nil nil (make-wcc-data)))))
+;; dont support this
+;;(defhandler %handle-mknod (args 11)
+;;  (destructuring-bind (dirop spec) args
+;;    (declare (ignore dirop spec))
+;;    (make-xunion :ok (list nil nil (make-wcc-data)))))
 
 
 ;; ------------------------------------------------------
@@ -346,8 +385,12 @@ ATTRS: initial attributes for the symlink."
 
 (defhandler %handle-remove (args 12)
   (with-slots (dir name) args
-    (declare (ignore dir name))
-    (make-xunion :ok (make-wcc-data))))
+    (let ((dhandle (find-handle dir)))
+      (if dhandle
+	  (progn
+	    (remove-file dhandle name)
+	    (make-xunion :ok (make-wcc-data)))
+	  (make-xunion :bad-handle (make-wcc-data))))))
 	       
 ;; ------------------------------------------------------
 ;; rmdir -- remove a directory 
@@ -366,8 +409,12 @@ ATTRS: initial attributes for the symlink."
 
 (defhandler %handle-rmdir (args 13)
   (with-slots (dir name) args
-    (declare (ignore dir name))
-    (make-xunion :ok (make-wcc-data))))
+    (let ((dhandle (find-handle dir)))
+      (if dhandle
+	  (progn
+	    (remove-directory dhandle name)
+	    (make-xunion :ok (make-wcc-data)))
+	  (make-xunion :bad-handle (make-wcc-data))))))
 	       
 ;; ------------------------------------------------------
 ;; rename -- rename a file or directory 
@@ -389,8 +436,19 @@ ATTRS: initial attributes for the symlink."
 
 (defhandler %handle-rename (args 14)
   (destructuring-bind (from to) args
-    (declare (ignore from to))
-    (make-xunion :ok (list (make-wcc-data) (make-wcc-data)))))
+    (let ((fdh (dir-op-args3-dir from))
+	  (fname (dir-op-args3-name from))
+	  (tdh (dir-op-args3-dir to))
+	  (tname (dir-op-args3-name to)))
+      (let ((fdhandle (find-handle fdh))
+	    (tdhandle (find-handle tdh)))
+	(if (and fdhandle tdhandle)
+	    (let ((fpath (handle-pathname (make-handle fdhandle fname)))
+		  (tpath (handle-pathname (make-handle tdhandle tname))))
+	      (rename-file fpath tpath)
+	      (make-xunion :ok (list (make-wcc-data) (make-wcc-data))))
+	    (make-xunion :bad-handle
+			 (list (make-wcc-data) (make-wcc-data))))))))
 
 
 ;; ------------------------------------------------------
@@ -408,10 +466,10 @@ ATTRS: initial attributes for the symlink."
 	      (list handle (make-dir-op-args3 :dir dhandle :name filename))
 	      :port port))
 
-(defhandler %handle-link (args 15)
-  (destructuring-bind (handle dirop) args
-    (declare (ignore handle dirop))
-    (make-xunion :ok (list nil (make-wcc-data)))))
+;;(defhandler %handle-link (args 15)
+;;  (destructuring-bind (handle dirop) args
+;;    (declare (ignore handle dirop))
+;;    (make-xunion :ok (list nil (make-wcc-data)))))
 
 ;; ------------------------------------------------------
 ;; read dir -- read from a directory 
@@ -453,9 +511,37 @@ ATTRS: initial attributes for the symlink."
 		
 
 (defhandler %handle-read-dir (args 16)
-  (destructuring-bind (dhandle cookie verf count) args
-    (declare (ignore dhandle cookie verf count))
-    (make-xunion :ok (list nil nil (make-dir-list3 :eof t)))))
+  (destructuring-bind (dh cookie verf count) args
+    (declare (ignore cookie verf count))
+    (let ((dhandle (find-handle dh)))
+      (if dhandle 
+	  (let ((files (cl-fad:list-directory (handle-pathname dhandle)))
+		(dlist3 (make-dir-list3 :eof t)))
+	    (do ((%files files (cdr %files))
+		 (fileid 0 (1+ fileid)))
+		((null %files))
+	      (let ((path (car %files)))
+		(setf (dir-list3-entries dlist3)
+		      (make-%entry3 :entry (make-entry3 :fileid fileid
+							:name (if (cl-fad:directory-pathname-p path)
+								  (car (last (pathname-directory path)))
+								  (format nil "~A~A~A" 
+								      (pathname-name path)
+								      (if (pathname-type path)
+									  "."
+									  "")
+								      (if (pathname-type path)
+									  (pathname-type path)
+									  ""))))
+				    :next-entry (dir-list3-entries dlist3)))))
+	    (make-xunion :ok 
+			 (list nil (make-cookie-verf3) dlist3)))
+	    ;; remove this
+;;	    (do ((entries (dir-list3-entries dlist3) (%entry3-next-entry entries))
+;;		 (elist nil))
+;;		((null entries) elist)
+;;	      (push (%entry3-entry entries) elist)))
+	  (make-xunion :bad-handle nil)))))
 
 ;; ------------------------------------------------------
 ;; read dir plus -- extended read from directory 
@@ -605,7 +691,9 @@ ATTRS: initial attributes for the symlink."
 (defun call-commit (handle offset count &key (host *nfs-host*) (port *nfs-port*))
   (%call-commit host (list handle offset count) :port port))
 
-(defhandler %handle-commit (args 21)
-  (destructuring-bind (handle offset count) args
-    (declare (ignore handle offset count))
-    (make-xunion :ok (list (make-wcc-data) (make-write-verf3)))))
+
+;; dont support this
+;;(defhandler %handle-commit (args 21)
+;;  (destructuring-bind (handle offset count) args
+;;    (declare (ignore handle offset count))
+;;    (make-xunion :ok (list (make-wcc-data) (make-write-verf3)))))

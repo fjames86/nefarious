@@ -11,7 +11,8 @@
   ((:file "mount")
    (:file "package" :depends-on ("mount"))
    (:file "nfs" :depends-on ("package"))
-   (:file "interface" :depends-on ("nfs"))
-   (:file "server" :depends-on ("package")))
-  :depends-on (:frpc))
+   (:file "handles" :depends-on ("nfs"))
+   (:file "interface" :depends-on ("handles"))
+   (:file "server" :depends-on ("interface")))
+  :depends-on (:frpc :cl-fad))
 
