@@ -1,0 +1,152 @@
+Network Status Monitor Protocol
+
+Introduction
+
+This chapter describes the Network Status Monitor (NSM) protocol which is related to, but separate from, the Network Lock Manager (NLM) protocol. The NSM protocol is not specified as a part of the NLM protocol to allow the implementor flexibility and to facilitate the development of new mechanisms without requiring the revision of related protocols.
+
+The NLM uses the NSM protocol to enable it to recover from crashes of either the client or server host. To provide this functionality the NSM and NLM protocols on both the client and server hosts must cooperate.
+
+The NSM is a service that provides applications with information on the status of network hosts. Each NSM keeps track of its own "state" and notifies any interested party of a change in this state to any other NSM upon request. The state is merely a number which increases monotonically each time the state of the host changes; an even number indicates the host is down, while an odd number indicates the host is up.
+
+Applications register the network hosts they are interested in with the local NSM. If one of these hosts crashes, the NSM on the crashed host, after a reboot, will notify the NSM on the local host that the state changed. The local NSM can then, in turn, notify the interested application of this state change.
+
+The NSM is used heavily by the Network Lock Manager (NLM). The local NLM registers with the local NSM all server hosts on which the NLM has currently active locks. In parallel, the NLM on the remote (server) host registers all of its client hosts with its local NSM. If the server host crashes and reboots, the server NSM will inform the NSM on the client hosts of this event. The local NLM can then take steps to re-establish the locks when the server is rebooted. Low-end systems that do not run an NSM, due to memory or speed constraints, are restricted to using non-monitored locks. See File Locking over XNFS and Network Lock Manager Protocol .
+
+RPC Information
+
+Authentication
+
+The NSM service uses AUTH_UNIX style of authentication.
+
+Transport Protocols
+
+The NSM Protocol is required to support the UDP/IP transport protocol to allow the NLM to operate. However, implementors may also choose to support the TCP/IP transport protocol.
+
+Port Number
+
+Consult the server's port mapper, described in Port Mapper Protocol , to find the port number on which the NSM service is registered.
+
+Sizes of XDR Structures
+
+These are the sizes, given in decimal bytes, of various XDR structures used in the protocol.
+
+ 
+
+/*
+ * This defines the maximum length of the string
+ * identifying the caller.
+ */
+const SM_MAXSTRLEN = 1024
+
+Basic Data Types
+
+This section presents the data types used by the NSM.
+
+sm_name
+
+  
+
+struct sm_name {
+    string mon_name<SM_MAXSTRLEN>;
+};
+
+sm_name is the name of the host to be monitored by the NSM. It is the parameter to the SM_STAT call.
+Implementations and applications must be able to handle host names as 8-bit transparent data (allowing use of arbitrary character set encodings). For maximum portability and interworking, it is recommended that applications and users define host names containing only the characters of the Portable Filename Character Set defined in ISO/IEC 9945-1:1990. (This also applies to the "my_id.my_name" fields in the call arguments of the SM_MON, SM_UNMON and SM_UNMON_ALL procedures.)
+
+res
+
+  
+
+res {
+    STAT_SUCC = 0,   /*  NSM agrees to monitor.  */
+    STAT_FAIL = 1    /*  NSM cannot monitor.  */
+};
+
+res is returned when the NSM is asked whether it can monitor the given host or if it has been successful in monitoring the given host.
+sm_stat_res
+
+  
+
+struct sm_stat_res {
+    res    res_stat;
+    int    state;
+};
+
+sm_stat_res is the return value from SM_STAT and SM_MON procedures. It includes the return status of the call and the state number of the local host.
+
+sm_stat
+
+  
+
+struct sm_stat {
+    int    state;    /*  state number of NSM  */
+};
+
+The state number of the NSM monotonically increases each time state of the host changes; an even number indicates that the host is down, while an odd number indicates that it is up.
+
+my_id
+
+  
+
+struct my_id {
+    string my_name<SM_MAXSTRLEN>;  /*  hostname  */
+    int    my_prog;                /*  RPC program number  */
+    int    my_vers;                /*  program version number  */
+    int    my_proc;                /*  procedure number  */
+};
+
+my_id contains the RPC call-back information. See SM_NOTIFY for more information.
+mon_id
+
+  
+
+struct mon_id {
+    string mon_name<SM_MAXSTRLEN>; /* name of the host to be monitored */
+    struct my_id my_id;
+};
+
+Contains the name of the host to be monitored and RPC call-back information. See SM_NOTIFY for more information.
+
+mon
+
+  
+
+struct mon {
+    struct mon_id mon_id;
+    opaque    priv[16];        /*  private information  */
+};
+
+Parameter to SM_MON call. "priv" is information provided by the client that is returned on notification of a server state change (crash and reboot).
+
+stat_chge
+
+  
+
+struct stat_chge {
+    string    mon_name;
+    int    state;
+};
+
+This is the parameter to the SM_NOTIFY call. It contains the name of the host that had a state change (that is, crashed and recovered) and its new state number.
+
+NSM Procedures
+
+The following reference pages define the RPC procedures supplied by an NSM server.
+
+ 
+
+/*
+ *  Protocol description for the NSM program.
+ */
+
+program SM_PROG {
+    version SM_VERS {
+        void SM_NULL(void) = 0;
+        struct sm_stat_res SM_STAT(struct sm_name) = 1;
+        struct sm_stat_res SM_MON(struct mon) = 2;
+        struct sm_stat SM_UNMON(struct mon_id) = 3;
+        struct sm_stat SM_UNMON_ALL(struct my_id) = 4;    
+        void SM_SIMU_CRASH(void) = 5;
+        void SM_NOTIFY(struct stat_chg) = 6;
+    } = 1;
+} = 100024;

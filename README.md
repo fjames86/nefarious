@@ -1,12 +1,12 @@
 # nefarious
-NFS library
+An NFS implementation in Common Lisp.
 
 1. Introduction
 -----------------
 
 This is an attempt at implementing an NFS client and server in Common Lisp. 
 
-See its sister project, FRPC, for the underlying ONCRPC implementation details.
+See its sister project, FRPC, for the underlying ONC/RPC implementation details.
 
 2. Aims
 --------
@@ -27,7 +27,7 @@ a new stream type to make reading/writing remote files seamless.
 4. Server 
 -----------
 
-The NFS server stubs have been typed in but are not yet functioning.
+The server component is progressing but not yet complete.
 
 5. License
 ------------

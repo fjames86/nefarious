@@ -12,7 +12,7 @@
 ;; void NFSPROC3_NULL(void)                    = 0;
 (defrpc %call-null 0 :void :void)
 (defun call-null (&key (host *nfs-host*) (port *nfs-port*) protocol)
-  (%call-null host nil :port port :protocol protocol))
+  (%call-null nil :host host :port port :protocol protocol))
 
 (defhandler %handle-null (void 0)
   (declare (ignore void))
@@ -35,7 +35,7 @@
     (otherwise :void)))
 
 (defun call-getattr (handle &key (host *nfs-host*) (port *nfs-port*) protocol)
-  (%call-getattr host handle :port port :protocol protocol))
+  (%call-getattr handle :host host :port port :protocol protocol))
  
 (defhandler %handle-getattr (fh 1)
   (let ((handle (find-handle fh)))
@@ -70,9 +70,11 @@
     (:ok wcc-data)
     (otherwise wcc-data)))
 
-(defun call-setattr (handle attr &key (host *nfs-host*) (port *nfs-port*) time)
-  (%call-setattr host (list handle attr time) 
-		 :port port))
+(defun call-setattr (handle attr &key (host *nfs-host*) (port *nfs-port*) time protocol)
+  (%call-setattr (list handle attr time) 
+		 :host host 
+		 :port port
+		 :protocol protocol))
 
 (defhandler %handle-setattr (args 2)
   (destructuring-bind (fh new-attrs guard) args
@@ -90,9 +92,11 @@
     (:ok (:list nfs-fh3 post-op-attr post-op-attr))
     (otherwise post-op-attr)))
 
-(defun call-lookup (dhandle filename &key (host *nfs-host*) (port *nfs-port*))
-  (%call-lookup host (make-dir-op-args3 :dir dhandle :name filename)
-		:port port))
+(defun call-lookup (dhandle filename &key (host *nfs-host*) (port *nfs-port*) protocol)
+  (%call-lookup (make-dir-op-args3 :dir dhandle :name filename)
+		:host host
+		:port port
+		:protocol protocol))
 
 (defhandler %handle-lookup (arg 3)
   (with-slots (dir name) arg
@@ -130,9 +134,11 @@
     (:ok (:list post-op-attr :uint32))
     (otherwise post-op-attr)))
 
-(defun call-access (handle access &key (host *nfs-host*) (port *nfs-port*))
-  (%call-access host (list handle access)
-		:port port))
+(defun call-access (handle access &key (host *nfs-host*) (port *nfs-port*) protocol)
+  (%call-access (list handle access)
+		:host host
+		:port port
+		:protocol protocol))
 
 (defhandler %handle-access (args 4)
   (destructuring-bind (object access) args
@@ -149,8 +155,8 @@
     (:ok (:list post-op-attr nfs-path3))
     (otherwise post-op-attr)))
 
-(defun call-readlink (handle &key (host *nfs-host*) (port *nfs-port*))
-  (%call-readlink host handle :port port))
+(defun call-readlink (handle &key (host *nfs-host*) (port *nfs-port*) protocol)
+  (%call-readlink handle :host host :port port :protocol protocol))
 
 (defhandler %handle-readlink (handle 5)
   (declare (ignore handle))
@@ -171,9 +177,11 @@
 		(:varray* :octet)))
     (otherwise post-op-attr)))
 
-(defun call-read (handle offset count &key (host *nfs-host*) (port *nfs-port*))
-  (%call-read host (list handle offset count)
-	      :port port))
+(defun call-read (handle offset count &key (host *nfs-host*) (port *nfs-port*) protocol)
+  (%call-read (list handle offset count)
+	      :host host 
+	      :port port
+	      :protocol protocol))
 
 (defhandler %handle-read (args 6)
   (destructuring-bind (fh offset count) args
@@ -204,9 +212,11 @@
     (:ok (:list wcc-data count3 stable-how write-verf3))
     (otherwise wcc-data)))
 
-(defun call-write (handle offset data &key (host *nfs-host*) (port *nfs-port*) (stable :file-sync))
-  (%call-write host (list handle offset (length data) stable data)
-	       :port port))
+(defun call-write (handle offset data &key (host *nfs-host*) (port *nfs-port*) (stable :file-sync) protocol)
+  (%call-write (list handle offset (length data) stable data)
+	       :host host
+	       :port port
+	       :protocol protocol))
 
 (defhandler %handle-write (args 7)
   (destructuring-bind (fh offset count stable data) args
@@ -257,15 +267,17 @@
     (:ok (:list post-op-fh3 post-op-attr wcc-data))
     (otherwise wcc-data)))
 
-(defun call-create (dhandle filename &key (host *nfs-host*) (port *nfs-port*) (mode :unchecked) sattr verf)
-  (%call-create host (list (make-dir-op-args3 :dir dhandle :name filename)
-			   (make-xunion mode 
-					(ecase mode
-					  ((:unchecked :guarded) 
-					   (or sattr (make-sattr3)))
-					  (:exclusive 
-					   (or verf (make-create-verf3))))))
-		:port port))
+(defun call-create (dhandle filename &key (host *nfs-host*) (port *nfs-port*) (mode :unchecked) sattr verf protocol)
+  (%call-create (list (make-dir-op-args3 :dir dhandle :name filename)
+		      (make-xunion mode 
+				   (ecase mode
+				     ((:unchecked :guarded) 
+				      (or sattr (make-sattr3)))
+				     (:exclusive 
+				      (or verf (make-create-verf3))))))
+		:host host
+		:port port
+		:protocol protocol))
 
 (defhandler %handle-create (args 8)
   (destructuring-bind (dirop how) args
@@ -289,10 +301,12 @@
     (:ok (:list post-op-fh3 post-op-attr wcc-data))
     (otherwise wcc-data)))
 
-(defun call-mkdir (dhandle filename &key sattr (host *nfs-host*) (port *nfs-port*))
-  (%call-mkdir host (list (make-dir-op-args3 :dir dhandle :name filename)
-			  (or sattr (make-sattr3)))
-	       :port port))
+(defun call-mkdir (dhandle filename &key sattr (host *nfs-host*) (port *nfs-port*) protocol)
+  (%call-mkdir (list (make-dir-op-args3 :dir dhandle :name filename)
+		     (or sattr (make-sattr3)))
+	       :host host
+	       :port port
+	       :protocol protocol))
 
 (defhandler %handle-mkdir (args 9)
   (destructuring-bind (dir-op attrs) args
@@ -323,16 +337,18 @@
     (:ok (:list post-op-fh3 post-op-attr wcc-data))
     (otherwise wcc-data)))
 
-(defun call-create-symlink (dhandle filename path &key attrs (host *nfs-host*) (port *nfs-port*))
+(defun call-create-symlink (dhandle filename path &key attrs (host *nfs-host*) (port *nfs-port*) protocol)
   "DHANDLE: directory handle to create symlink in. 
 FILENAME: name to be associated with the link.
 PATH: the symbolic link data.
 ATTRS: initial attributes for the symlink."
-  (%call-create-symlink host (list (make-dir-op-args3 :dir dhandle 
-						      :name filename)
-				   attrs
-				   path)
-			:port port))
+  (%call-create-symlink (list (make-dir-op-args3 :dir dhandle 
+						 :name filename)
+			      attrs
+			      path)
+			:host host
+			:port port
+			:protocol protocol))
 
 ;;(defhandler %handle-create-symlink (args 10)
 ;;  (destructuring-bind (dirop attrs path) args
@@ -353,14 +369,15 @@ ATTRS: initial attributes for the symlink."
     (:ok (:list post-op-fh3 post-op-attr wcc-data))
     (otherwise wcc-data)))
 
-(defun call-mknod (dhandle filename &key (host *nfs-host*) (port *nfs-port*) sattr specdata (ftype :reg))
-  (%call-mknod host 
-	       (list (make-dir-op-args3 :dir dhandle :name filename)
+(defun call-mknod (dhandle filename &key (host *nfs-host*) (port *nfs-port*) sattr specdata (ftype :reg) protocol)
+  (%call-mknod (list (make-dir-op-args3 :dir dhandle :name filename)
 		     (make-xunion ftype
 				  (case ftype
 				    ((:chr :blk) (list sattr specdata))
 				    ((:sock :fifo) sattr))))
-	       :port port))
+	       :host host
+	       :port port
+	       :protocol protocol))
 
 ;; dont support this
 ;;(defhandler %handle-mknod (args 11)
@@ -379,9 +396,11 @@ ATTRS: initial attributes for the symlink."
     (:ok wcc-data)
     (otherwise wcc-data)))
 
-(defun call-remove (dhandle filename &key (host *nfs-host*) (port *nfs-port*))
-  (%call-remove host (make-dir-op-args3 :dir dhandle :name filename)
-		:port port))
+(defun call-remove (dhandle filename &key (host *nfs-host*) (port *nfs-port*) protocol)
+  (%call-remove (make-dir-op-args3 :dir dhandle :name filename)
+		:host host
+		:port port
+		:protocol protocol))
 
 (defhandler %handle-remove (args 12)
   (with-slots (dir name) args
@@ -403,9 +422,11 @@ ATTRS: initial attributes for the symlink."
     (:ok wcc-data)
     (otherwise wcc-data)))
 
-(defun call-rmdir (dhandle name &key (host *nfs-host*) (port *nfs-port*))
-  (%call-rmdir host (make-dir-op-args3 :dir dhandle :name name)
-	       :port port))
+(defun call-rmdir (dhandle name &key (host *nfs-host*) (port *nfs-port*) protocol)
+  (%call-rmdir (make-dir-op-args3 :dir dhandle :name name)
+	       :host host
+	       :port port
+	       :protocol protocol))
 
 (defhandler %handle-rmdir (args 13)
   (with-slots (dir name) args
@@ -426,13 +447,14 @@ ATTRS: initial attributes for the symlink."
     (:ok (:list wcc-data wcc-data))
     (otherwise (:list wcc-data wcc-data))))
 
-(defun call-rename (from-dhandle from-filename to-filename &key to-dhandle (host *nfs-host*) (port *nfs-port*))
-  (%call-rename host
-		(list (make-dir-op-args3 :dir from-dhandle 
+(defun call-rename (from-dhandle from-filename to-filename &key to-dhandle (host *nfs-host*) (port *nfs-port*) protocol)
+  (%call-rename (list (make-dir-op-args3 :dir from-dhandle 
 					 :name from-filename)
 		      (make-dir-op-args3 :dir (or to-dhandle from-dhandle)
 					 :name to-filename))
-		:port port))
+		:host host
+		:port port
+		:protocol protocol))
 
 (defhandler %handle-rename (args 14)
   (destructuring-bind (from to) args
@@ -461,10 +483,11 @@ ATTRS: initial attributes for the symlink."
     (:ok (:list post-op-attr wcc-data))
     (otherwise (:list post-op-attr wcc-data))))
 
-(defun call-link (handle dhandle filename &key (host *nfs-host*) (port *nfs-port*))
-  (%call-link host 
-	      (list handle (make-dir-op-args3 :dir dhandle :name filename))
-	      :port port))
+(defun call-link (handle dhandle filename &key (host *nfs-host*) (port *nfs-port*) protocol)
+  (%call-link (list handle (make-dir-op-args3 :dir dhandle :name filename))
+	      :host host
+	      :port port
+	      :protocol protocol))
 
 ;;(defhandler %handle-link (args 15)
 ;;  (destructuring-bind (handle dirop) args
@@ -494,9 +517,11 @@ ATTRS: initial attributes for the symlink."
     (:ok (:list post-op-attr cookie-verf3 dir-list3))
     (otherwise post-op-attr)))
 
-(defun call-read-dir (dhandle &key verf (cookie 0) (count 65536) (host *nfs-host*) (port *nfs-port*))
-  (let ((res (%call-read-dir host (list dhandle cookie (or verf (make-cookie-verf3)) count)
-			     :port port)))
+(defun call-read-dir (dhandle &key verf (cookie 0) (count 65536) (host *nfs-host*) (port *nfs-port*) protocol)
+  (let ((res (%call-read-dir (list dhandle cookie (or verf (make-cookie-verf3)) count)
+			     :host host
+			     :port port
+			     :protocol protocol)))
     (if (eq (xunion-tag res) :ok)
 	(destructuring-bind (attr cverf dlist) (xunion-val res)
 	  (list attr cverf 
@@ -577,10 +602,11 @@ ATTRS: initial attributes for the symlink."
     (:ok (:list post-op-attr cookie-verf3 dir-list3-plus))
     (otherwise post-op-attr)))
 
-(defun call-read-dir-plus (dhandle count &key max (cookie 0) verf (host *nfs-host*) (port *nfs-port*))
-  (%call-read-dir-plus host 
-		       (list dhandle cookie (or verf (make-cookie-verf3)) count (or max count))
-		       :port port))
+(defun call-read-dir-plus (dhandle count &key max (cookie 0) verf (host *nfs-host*) (port *nfs-port*) protocol)
+  (%call-read-dir-plus (list dhandle cookie (or verf (make-cookie-verf3)) count (or max count))
+		       :host host
+		       :port port
+		       :protocol protocol))
 
 (defhandler %handle-read-dir-plus (args 17)
   (destructuring-bind (dir cookie verf count max) args
@@ -608,8 +634,8 @@ ATTRS: initial attributes for the symlink."
     (:ok fs-stat)
     (otherwise post-op-attr)))
 
-(defun call-fs-stat (handle &key (host *nfs-host*) (port *nfs-port*))
-  (%call-fs-stat host handle :port port))
+(defun call-fs-stat (handle &key (host *nfs-host*) (port *nfs-port*) protocol)
+  (%call-fs-stat handle :host host :port port :protocol protocol))
 
 (defhandler %handle-fs-stat (handle 18)
   (declare (ignore handle))
@@ -644,8 +670,8 @@ ATTRS: initial attributes for the symlink."
     (:ok fs-info)
     (otherwise post-op-attr)))
 
-(defun call-fs-info (handle &key (host *nfs-host*) (port *nfs-port*))
-  (%call-fs-info host handle :port port))
+(defun call-fs-info (handle &key (host *nfs-host*) (port *nfs-port*) protocol)
+  (%call-fs-info handle :host host :port port :protocol protocol))
 
 (defhandler %handle-fs-info (handle 19)
   (declare (ignore handle))
@@ -670,8 +696,8 @@ ATTRS: initial attributes for the symlink."
     (:ok path-conf)
     (otherwise post-op-attr)))
 
-(defun call-path-conf (handle &key (host *nfs-host*) (port *nfs-port*))
-  (%call-path-conf host handle :port port))
+(defun call-path-conf (handle &key (host *nfs-host*) (port *nfs-port*) protocol)
+  (%call-path-conf handle :host host :port port :protocol protocol))
 
 (defhandler %handle-path-conf (handle 20)
   (declare (ignore handle))
@@ -688,8 +714,8 @@ ATTRS: initial attributes for the symlink."
     (:ok (:list wcc-data write-verf3))
     (otherwise wcc-data)))
 
-(defun call-commit (handle offset count &key (host *nfs-host*) (port *nfs-port*))
-  (%call-commit host (list handle offset count) :port port))
+(defun call-commit (handle offset count &key (host *nfs-host*) (port *nfs-port*) protocol)
+  (%call-commit (list handle offset count) :host host :port port :protocol protocol))
 
 
 ;; dont support this
