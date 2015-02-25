@@ -11,8 +11,8 @@
 ;; ------------------------------------------------------
 ;; void NFSPROC3_NULL(void)                    = 0;
 (defrpc %call-null 0 :void :void)
-(defun call-null (&key (host *nfs-host*) (port *nfs-port*))
-  (%call-null host nil :port port))
+(defun call-null (&key (host *nfs-host*) (port *nfs-port*) protocol)
+  (%call-null host nil :port port :protocol protocol))
 
 (defhandler %handle-null (void 0)
   (declare (ignore void))
@@ -34,8 +34,8 @@
     (:ok fattr3)
     (otherwise :void)))
 
-(defun call-getattr (handle &key (host *nfs-host*) (port *nfs-port*))
-  (%call-getattr host handle :port port))
+(defun call-getattr (handle &key (host *nfs-host*) (port *nfs-port*) protocol)
+  (%call-getattr host handle :port port :protocol protocol))
  
 (defhandler %handle-getattr (fh 1)
   (let ((handle (find-handle fh)))

@@ -11,7 +11,7 @@
   (export-directory export-directory)
   (setf *server* (make-rpc-server))
   (let ((tcp-ports (list pmap:*pmap-port* *nfs-port* nfs.mount:*mount-port*))
-	(udp-ports nil))
+	(udp-ports (list pmap:*pmap-port* *nfs-port* nfs.mount:*mount-port*)))
     (start-rpc-server *server* 
 		      :tcp-ports tcp-ports
 		      :udp-ports udp-ports)))
