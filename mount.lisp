@@ -33,6 +33,11 @@
 (defparameter *mount-host* "localhost")
 (defparameter *mount-port* 635)
 
+(define-condition mount-error (error)
+  ((stat :initarg :stat :initform nil :reader mount-error-stat))
+  (:report (lambda (condition stream)
+	     (format stream "MOUNT-ERROR: ~A" (mount-error-stat condition)))))
+
 ;; -----------------------------------------------------
 ;; for testing connections 
 (defrpc %call-null 0 :void :void)
@@ -49,11 +54,14 @@
 (defrpc %call-mount 1
   dir-path
   (:union mount-stat3
-    (:ok (:list fhandle3 (:varray :int32)))
+    (:ok (:list fhandle3 (:varray frpc::auth-flavour)))
     (otherwise :void)))
 
 (defun call-mount (dpath &key (host *mount-host*) (port *mount-port*) protocol)
-  (%call-mount dpath :host host :port port :protocol protocol))
+  (let ((res (%call-mount dpath :host host :port port :protocol protocol)))
+    (case (xunion-tag res)
+      (:ok (xunion-val res))
+      (otherwise (error 'mount-error :stat (xunion-tag res))))))
 
 ;; FIXME: we need to keep a list of the clients who have mounted. any NFS calls from 
 ;; non-mounted clients should be rejected
@@ -62,7 +70,7 @@
   (let ((dhandle (nefarious::find-export dpath)))
     (if dhandle
 	(make-xunion :ok 
-		     (list (nefarious::handle-fh dhandle) '(0)))
+		     (list (nefarious::handle-fh dhandle) '(:auth-null)))
 	nil)))
 
 ;; -----------------------------------------------------
