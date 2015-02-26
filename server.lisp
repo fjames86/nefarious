@@ -6,9 +6,10 @@
 ;; the server 
 (defvar *server* nil)
 
-(defun start (export-directory)
+(defun start (&optional export-directory)
   "Start the NFS server."
-  (export-directory export-directory)
+  (export-directory (or export-directory 
+			(merge-pathnames (make-pathname))))
   (setf *server* (make-rpc-server))
   (let ((tcp-ports (list pmap:*pmap-port* *nfs-port* nfs.mount:*mount-port*))
 	(udp-ports (list pmap:*pmap-port* *nfs-port* nfs.mount:*mount-port*)))

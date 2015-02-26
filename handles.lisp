@@ -1,3 +1,5 @@
+;;;; Copyright (c) Frank James 2015 <frank.a.james@gmail.com>
+;;;; This code is licensed under the MIT license.
 
 
 (in-package #:nefarious)
@@ -6,7 +8,7 @@
 
 (defstruct (handle (:constructor %make-handle))
   hash
-  fh ;; nfs file handle
+  fh ;; nfs file handle i.e. an octet array
   pathname
   directory-p
   parent ;; nfs directory handle of the parent (or nil if toplevel export directory)
