@@ -8,10 +8,10 @@
   :description "NFS library"
   :license "MIT"
   :components
-  ((:file "mount")
-   (:file "package" :depends-on ("mount"))
+  ((:file "package")
+   (:file "handles" :depends-on ("package"))
+   (:file "mount" :depends-on ("handles"))
    (:file "nfs" :depends-on ("package"))
-   (:file "handles" :depends-on ("nfs"))
    (:file "interface" :depends-on ("handles"))
    (:file "server" :depends-on ("interface")))
   :depends-on (:frpc :cl-fad))

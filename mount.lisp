@@ -1,16 +1,7 @@
+;;;; Copyright (c) Frank James 2015 <frank.a.james@gmail.com>
+;;;; This code is licensed under the MIT license.
 
 ;;; The mount protocol
-
-(defpackage #:nefarious.mount
-  (:use #:cl #:frpc)
-  (:nicknames #:nfs.mount)
-  (:export #:call-null
-	   #:call-mount
-	   #:call-dump
-	   #:call-unmount
-	   #:call-unmount-all
-	   #:call-export
-	   #:*mount-port*))
 
 (in-package #:nefarious.mount)
 
@@ -64,10 +55,15 @@
 (defun call-mount (dpath &key (host *mount-host*) (port *mount-port*) protocol)
   (%call-mount dpath :host host :port port :protocol protocol))
 
+;; FIXME: we need to keep a list of the clients who have mounted. any NFS calls from 
+;; non-mounted clients should be rejected
 (defhandler %handle-mount (dpath 1)
-  (declare (ignore dpath))
-  (make-xunion :ok 
-	       (list nil nil)))
+  "Find the exported directory with the export name DPATH and return its handle and authentication flavours."
+  (let ((dhandle (nefarious::find-export dpath)))
+    (if dhandle
+	(make-xunion :ok 
+		     (list (nefarious::handle-fh dhandle) '(0)))
+	nil)))
 
 ;; -----------------------------------------------------
 ;; dump -- return mount entries
@@ -83,9 +79,9 @@
 (defun call-dump (&key (host *mount-host*) (port *mount-port*) protocol)
   (%call-dump nil :host host :port port :protocol protocol))
 
-(defhandler %handle-dump (void 2)
-  (declare (ignore void))
-  nil)
+;;(defhandler %handle-dump (void 2)
+;;  (declare (ignore void))
+;;  nil)
 
 ;; -----------------------------------------------------
 ;; unmount -- remove mount entry 
@@ -93,6 +89,8 @@
 (defun call-unmount (dpath &key (host *mount-host*) (port *mount-port*) protocol)
   (%call-unmount dpath :host host :port port :protocol protocol))
 
+;; FIXME: when we support keeping a list of mounted clients we should 
+;; remove the client from this list 
 (defhandler %handle-unmount (dpath 3)
   (declare (ignore dpath))
   nil)
@@ -135,6 +133,6 @@
 			(push (group-node-name groups) glist))))
 	  elist)))
 
-(defhandler %handle-export (void 5)
-  (declare (ignore void))
-  nil)
+;;(defhandler %handle-export (void 5)
+;;  (declare (ignore void))
+;;  nil)

@@ -50,18 +50,23 @@
 					  t))))
     handle))
 
-(defun make-export-handle (export-path)
-  (let* ((pathname (cl-fad:pathname-as-directory export-path))
+(defstruct (mount-handle (:constructor %make-mount-handle)
+			 (:include handle))
+  export-path)
+
+(defun make-mount-handle (path export-path)
+  (let* ((pathname (cl-fad:pathname-as-directory path))
 	 (hash (sxhash pathname))
 	 (handle 
-	  (%make-handle :hash hash
-			:fh (let ((v (nibbles:make-octet-vector 8)))
-			      (setf (nibbles:ub64ref/be v 0) hash)
-			      v)
-			:pathname pathname
-			:directory-p (and (cl-fad:directory-pathname-p pathname)
-					  (cl-fad:directory-exists-p pathname)
-					  t))))
+	  (%make-mount-handle :hash hash
+			      :fh (let ((v (nibbles:make-octet-vector 8)))
+				    (setf (nibbles:ub64ref/be v 0) hash)
+				    v)
+			      :pathname pathname
+			      :directory-p (and (cl-fad:directory-pathname-p pathname)
+						(cl-fad:directory-exists-p pathname)
+						t)
+			      :export-path export-path)))
     handle))
 
 (defun find-handle (fh)
@@ -88,11 +93,19 @@
     (push handle (handle-children dhandle))
     handle))
 
-(defun export-directory (path)
-  (let ((handle (make-export-handle path)))
+(defparameter *exports* nil)
+
+(defun export-directory (path export-path)
+  (let ((handle (make-mount-handle path export-path)))
+    (push handle *exports*)
     (push handle *handles*)
     handle))
 
+(defun find-export (dpath)
+  (declare (type string dpath))
+  (find dpath *exports* 
+	:key #'mount-handle-export-path
+	:test #'string-equal))
 
 ;; ----------- file operations -------------------
 

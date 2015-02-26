@@ -1,6 +1,7 @@
 ;;;; Copyright (c) Frank James 2015 <frank.a.james@gmail.com>
 ;;;; This code is licensed under the MIT license.
 
+;; nfs protocol
 (defpackage #:nefarious
  (:use #:cl #:frpc)
  (:nicknames #:nfs)
@@ -29,4 +30,14 @@
 	  #:start
 	  #:stop))
 
-
+;; for the mount protocol
+(defpackage #:nefarious.mount
+  (:use #:cl #:frpc)
+  (:nicknames #:nfs.mount)
+  (:export #:call-null
+	   #:call-mount
+	   #:call-dump
+	   #:call-unmount
+	   #:call-unmount-all
+	   #:call-export
+	   #:*mount-port*))
