@@ -12,7 +12,8 @@
 	   #:call-unmount
 	   #:call-unmount-all
 	   #:call-export
-	   #:*mount-port*))
+	   #:*mount-port*
+	   #:mountedp))
 
 (in-package #:nefarious.mount)
 
