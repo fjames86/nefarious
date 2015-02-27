@@ -93,7 +93,7 @@
 		   (mount-body-next mount-list))
        (mlist nil))
       ((null mount-list) mlist)
-    (push (mount-list-mount mount-list) mlist)))
+    (push (mount-body-mount mount-list) mlist)))
 
 ;;(defhandler %handle-dump (void 2)
 ;;  (declare (ignore void))
