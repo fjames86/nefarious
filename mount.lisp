@@ -60,7 +60,8 @@
 (defun call-mount (dpath &key (host *mount-host*) (port *mount-port*) protocol)
   (let ((res (%call-mount dpath :host host :port port :protocol protocol)))
     (case (xunion-tag res)
-      (:ok (xunion-val res))
+      (:ok (destructuring-bind (dhandle auth-flavours) (xunion-val res)
+	     (values dhandle auth-flavours)))
       (otherwise (error 'mount-error :stat (xunion-tag res))))))
 
 ;; FIXME: we need to keep a list of the clients who have mounted. any NFS calls from 
@@ -71,21 +72,28 @@
     (if dhandle
 	(make-xunion :ok 
 		     (list (nefarious::handle-fh dhandle) '(:auth-null)))
-	nil)))
+	(make-xunion :inval nil))))
 
 ;; -----------------------------------------------------
 ;; dump -- return mount entries
 
 (defxtype* mount-list () (:optional mount-body))
 
+(defxtype* mounting () 
+  (:plist :hostname name
+	  :directory dir-path))
+
 (defxstruct mount-body ()
-  ((hostname name)
-   (directory dir-path)
+  ((mount mounting)
    (next mount-list)))
 
 (defrpc %call-dump 2 :void mount-list)
 (defun call-dump (&key (host *mount-host*) (port *mount-port*) protocol)
-  (%call-dump nil :host host :port port :protocol protocol))
+  (do ((mount-list (%call-dump nil :host host :port port :protocol protocol)
+		   (mount-body-next mount-list))
+       (mlist nil))
+      ((null mount-list) mlist)
+    (push (mount-list-mount mount-list) mlist)))
 
 ;;(defhandler %handle-dump (void 2)
 ;;  (declare (ignore void))
