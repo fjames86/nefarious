@@ -584,16 +584,11 @@ ATTRS: initial attributes for the symlink."
    (cookie cookie3 0)
    (attrs post-op-attr)
    (handle post-op-fh3)
-   (next-entry (:optional entry3*))))
+   (next-entry (:optional entry3-plus))))
 
 (defxstruct dir-list3-plus ()
   ((entries (:optional entry3-plus))
    (eof :boolean)))
-
-(defxstruct read-dir-plus-res-ok ()
-  ((attrs post-op-attr)
-   (cookie cookie-verf3)
-   (reply dir-list3*)))
 
 ;; READDIRPLUS3res NFSPROC3_READDIRPLUS(READDIRPLUS3args) = 17;
 (defrpc %call-read-dir-plus 17 
