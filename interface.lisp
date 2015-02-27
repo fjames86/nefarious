@@ -35,22 +35,29 @@
     (otherwise :void)))
 
 (defun call-getattr (handle &key (host *nfs-host*) (port *nfs-port*) protocol)
-  (%call-getattr handle :host host :port port :protocol protocol))
+  (let ((res (%call-getattr handle :host host :port port :protocol protocol)))
+    (if (eq (xunion-tag res) :ok)
+	(xunion-val res)
+	(error "GETATTR failed: ~A" (xunion-tag res)))))
  
 (defhandler %handle-getattr (fh 1)
   (let ((handle (find-handle fh)))
     (if handle
 	(make-xunion :ok
-		     (make-fattr3 :mode 0
+		     (let ((size (file-size handle)))
+		     (make-fattr3 :type (if (handle-directory-p handle)
+					    :dir
+					    :reg)
+				  :mode 0
 				  :uid 0
 				  :gid 0
-				  :size 0
-				  :used 0
+				  :size size
+				  :used size
 				  :rdev (make-specdata3)
 				  :fileid 0
 				  :atime (make-nfs-time3)
 				  :mtime (make-nfs-time3)
-				  :ctime (make-nfs-time3)))
+				  :ctime (make-nfs-time3))))
 	(make-xunion :bad-handle nil))))
 
 
@@ -76,10 +83,10 @@
 		 :port port
 		 :protocol protocol))
 
-(defhandler %handle-setattr (args 2)
-  (destructuring-bind (fh new-attrs guard) args
-    (declare (ignore fh new-attrs guard))
-    (make-xunion :ok (make-wcc-data))))
+;;(defhandler %handle-setattr (args 2)
+;;  (destructuring-bind (fh new-attrs guard) args
+;;    (declare (ignore fh new-attrs guard))
+;;    (make-xunion :ok (make-wcc-data))))
 
 
 ;; ------------------------------------------------------
@@ -93,10 +100,14 @@
     (otherwise post-op-attr)))
 
 (defun call-lookup (dhandle filename &key (host *nfs-host*) (port *nfs-port*) protocol)
-  (%call-lookup (make-dir-op-args3 :dir dhandle :name filename)
-		:host host
-		:port port
-		:protocol protocol))
+  (let ((res (%call-lookup (make-dir-op-args3 :dir dhandle :name filename)
+			   :host host
+			   :port port
+			   :protocol protocol)))
+    (if (eq (xunion-tag res) :ok)
+	(destructuring-bind (fh attr1 attr2) (xunion-val res)
+	  (values fh attr1 attr2))
+	(error "LOOKUP failed: ~A" (xunion-tag res)))))
 
 (defhandler %handle-lookup (arg 3)
   (with-slots (dir name) arg
@@ -163,7 +174,6 @@
   (make-xunion :ok (list nil "")))
 
 
-
 ;; ------------------------------------------------------
 ;; read -- read from file
 ;; READ3res NFSPROC3_READ(READ3args)               = 6;
@@ -178,10 +188,15 @@
     (otherwise post-op-attr)))
 
 (defun call-read (handle offset count &key (host *nfs-host*) (port *nfs-port*) protocol)
-  (%call-read (list handle offset count)
-	      :host host 
-	      :port port
-	      :protocol protocol))
+  (let ((res (%call-read (list handle offset count)
+			 :host host 
+			 :port port
+			 :protocol protocol)))
+    (if (eq (xunion-tag res) :ok)
+	(destructuring-bind (attr count eof data) (xunion-val res)
+	  (declare (ignore count))
+	  (values data eof attr))
+	(error "READ failed: ~A" (xunion-tag res)))))
 
 (defhandler %handle-read (args 6)
   (destructuring-bind (fh offset count) args
@@ -213,10 +228,13 @@
     (otherwise wcc-data)))
 
 (defun call-write (handle offset data &key (host *nfs-host*) (port *nfs-port*) (stable :file-sync) protocol)
-  (%call-write (list handle offset (length data) stable data)
-	       :host host
-	       :port port
-	       :protocol protocol))
+  (let ((res (%call-write (list handle offset (length data) stable data)
+			  :host host
+			  :port port
+			  :protocol protocol)))
+    (if (eq (xunion-tag res) :ok)
+	(xunion-val res)
+	(error "WRITE failed: ~A" (xunion-tag res)))))
 
 (defhandler %handle-write (args 7)
   (destructuring-bind (fh offset count stable data) args
@@ -268,16 +286,20 @@
     (otherwise wcc-data)))
 
 (defun call-create (dhandle filename &key (host *nfs-host*) (port *nfs-port*) (mode :unchecked) sattr verf protocol)
-  (%call-create (list (make-dir-op-args3 :dir dhandle :name filename)
-		      (make-xunion mode 
-				   (ecase mode
-				     ((:unchecked :guarded) 
-				      (or sattr (make-sattr3)))
-				     (:exclusive 
-				      (or verf (make-create-verf3))))))
-		:host host
-		:port port
-		:protocol protocol))
+  (let ((res (%call-create (list (make-dir-op-args3 :dir dhandle :name filename)
+				 (make-xunion mode 
+					      (ecase mode
+						((:unchecked :guarded) 
+						 (or sattr (make-sattr3)))
+						(:exclusive 
+						 (or verf (make-create-verf3))))))
+			   :host host
+			   :port port
+			   :protocol protocol)))
+    (if (eq (xunion-tag res) :ok)
+	(destructuring-bind (fh attr wcc) (xunion-val res)
+	  (values fh attr wcc))
+	(error "CREATE failed: ~A" (xunion-tag res)))))
 
 (defhandler %handle-create (args 8)
   (destructuring-bind (dirop how) args

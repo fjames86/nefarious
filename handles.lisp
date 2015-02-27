@@ -22,6 +22,7 @@
 	   #:write-file
 	   #:create-file
 	   #:remove-file
+	   #:file-size
 	   #:create-directory
 	   #:remove-directory))
 
@@ -165,6 +166,11 @@ the handles list. Returns the newly allocated handle."
 (defun remove-file (dhandle name)
   (let ((handle (make-handle dhandle name)))
     (delete-file (handle-pathname handle))))
+
+(defun file-size (handle)
+  (with-open-file (f (handle-pathname handle) :direction :input 
+		     :element-type '(unsigned-byte 8))
+    (file-length f)))
 
 (defun create-directory (dhandle name)
   (let ((handle (allocate-dhandle dhandle name)))
