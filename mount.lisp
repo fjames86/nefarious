@@ -49,6 +49,22 @@
   (:report (lambda (condition stream)
 	     (format stream "MOUNT-ERROR: ~A" (mount-error-stat condition)))))
 
+
+;; list of hosts who have mounted
+(defvar *mount-clients* nil)
+
+(defun add-mount-client (address)
+  (pushnew address *mount-clients*
+	   :test #'equalp))
+
+(defun rem-mount-client (address)
+  (setf *mount-clients*
+	(remove address *mount-clients*
+		:test #'equalp)))
+
+(defun mountedp (address)
+  (find address *mount-clients* :test #'equalp))
+
 ;; -----------------------------------------------------
 ;; for testing connections 
 (defrpc %call-null 0 :void :void)
@@ -80,10 +96,15 @@
 (defhandler %handle-mount (dpath 1)
   "Find the exported directory with the export name DPATH and return its handle and authentication flavours."
   (let ((dhandle (find-export dpath)))
-    (if dhandle
-	(make-xunion :ok 
-		     (list (handle-fh dhandle) '(:auth-null)))
-	(make-xunion :inval nil))))
+    (cond
+      (dhandle
+       (log:debug "Host ~A successfully mounted ~A" 
+		  frpc:*rpc-remote-host* (handle-pathname dhandle))
+       (add-mount-client frpc:*rpc-remote-host*)
+       (make-xunion :ok 
+		    (list (handle-fh dhandle) '(:auth-null))))
+      (t 
+       (make-xunion :inval nil)))))
 
 ;; -----------------------------------------------------
 ;; dump -- return mount entries
@@ -119,7 +140,8 @@
 ;; FIXME: when we support keeping a list of mounted clients we should 
 ;; remove the client from this list 
 (defhandler %handle-unmount (dpath 3)
-  (declare (ignore dpath))
+  (log:debug "Host ~A unmounted ~A" frpc:*rpc-remote-host* dpath)
+  (rem-mount-client frpc:*rpc-remote-host*)
   nil)
 
 ;; -----------------------------------------------------
@@ -130,6 +152,8 @@
 
 (defhandler %handle-unmount-all (void 4)
   (declare (ignore void))
+  (log:debug "Host ~A unmounted all" frpc:*rpc-remote-host*)
+  (rem-mount-client frpc:*rpc-remote-host*)
   nil)
 
 ;; -----------------------------------------------------

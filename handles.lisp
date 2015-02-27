@@ -98,14 +98,18 @@
 	   *handles*))
 
 (defun allocate-handle (dhandle name)
+  "Create an NFS handle for the file named NAME in the directory specified by DHANDLE and store it in 
+the handles list. Returns the newly allocated handle."
   (let ((handle (make-handle dhandle name)))
     ;; if the file does not exist then error
     (unless (cl-fad:file-exists-p (handle-pathname handle))
       (return-from allocate-handle nil))
 
     ;; the file exists, push it onto the list and the parent's children list
-    (push handle *handles*)
-    (push (handle-fh handle) (handle-children dhandle))
+    (unless (find-handle (handle-fh handle))
+      (push handle *handles*)
+      (push (handle-fh handle) (handle-children dhandle)))
+
     handle))
 
 (defun allocate-dhandle (dhandle name)
