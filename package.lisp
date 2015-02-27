@@ -3,7 +3,7 @@
 
 ;; nfs protocol
 (defpackage #:nefarious
- (:use #:cl #:frpc)
+ (:use #:cl #:frpc #:nefarious.handles)
  (:nicknames #:nfs)
  (:export #:call-null
 	  #:call-getattr
@@ -30,14 +30,3 @@
 	  #:start
 	  #:stop))
 
-;; for the mount protocol
-(defpackage #:nefarious.mount
-  (:use #:cl #:frpc)
-  (:nicknames #:nfs.mount)
-  (:export #:call-null
-	   #:call-mount
-	   #:call-dump
-	   #:call-unmount
-	   #:call-unmount-all
-	   #:call-export
-	   #:*mount-port*))

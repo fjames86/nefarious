@@ -5,14 +5,14 @@
 (asdf:defsystem :nefarious
   :name "Nefarious"
   :author "Frank James <frank.a.james@gmail.com>"
-  :description "NFS library"
+  :description "An NFS implementation in Common Lisp"
   :license "MIT"
   :components
-  ((:file "package")
-   (:file "handles" :depends-on ("package"))
+  ((:file "handles")
    (:file "mount" :depends-on ("handles"))
+   (:file "package" :depends-on ("mount"))
    (:file "nfs" :depends-on ("package"))
-   (:file "interface" :depends-on ("handles"))
+   (:file "interface" :depends-on ("nfs"))
    (:file "server" :depends-on ("interface")))
   :depends-on (:frpc :cl-fad))
 

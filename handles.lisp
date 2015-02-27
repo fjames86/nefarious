@@ -1,8 +1,31 @@
 ;;;; Copyright (c) Frank James 2015 <frank.a.james@gmail.com>
 ;;;; This code is licensed under the MIT license.
 
+(defpackage #:nefarious.handles 
+  (:use #:cl)
+  (:nicknames #:nfs.handles)
+  (:export #:handle-hash
+	   #:handle-fh	   
+	   #:handle-pathname
+	   #:handle-directory-p
+	   #:handle-parent
+	   #:handle-children
 
-(in-package #:nefarious)
+	   #:make-handle
+	   #:allocate-handle
+	   #:allocate-dhandle
+	   #:find-handle
+	   #:export-directory
+	   #:find-export 
+	   
+	   #:read-file
+	   #:write-file
+	   #:create-file
+	   #:remove-file
+	   #:create-directory
+	   #:remove-directory))
+
+(in-package #:nefarious.handles)
 
 (defparameter *handles* nil)
 

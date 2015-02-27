@@ -3,6 +3,17 @@
 
 ;;; The mount protocol
 
+(defpackage #:nefarious.mount
+  (:use #:cl #:frpc #:nefarious.handles)
+  (:nicknames #:nfs.mount)
+  (:export #:call-null
+	   #:call-mount
+	   #:call-dump
+	   #:call-unmount
+	   #:call-unmount-all
+	   #:call-export
+	   #:*mount-port*))
+
 (in-package #:nefarious.mount)
 
 (defconstant +mount-program+ 100005)
@@ -68,10 +79,10 @@
 ;; non-mounted clients should be rejected
 (defhandler %handle-mount (dpath 1)
   "Find the exported directory with the export name DPATH and return its handle and authentication flavours."
-  (let ((dhandle (nefarious::find-export dpath)))
+  (let ((dhandle (find-export dpath)))
     (if dhandle
 	(make-xunion :ok 
-		     (list (nefarious::handle-fh dhandle) '(:auth-null)))
+		     (list (handle-fh dhandle) '(:auth-null)))
 	(make-xunion :inval nil))))
 
 ;; -----------------------------------------------------
