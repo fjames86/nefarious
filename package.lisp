@@ -6,8 +6,8 @@
  (:use #:cl #:frpc #:nefarious.handles)
  (:nicknames #:nfs)
  (:export #:call-null
-	  #:call-getattr
-	  #:call-setattr
+	  #:call-get-attr
+	  #:call-set-attr
 	  #:call-lookup
 	  #:call-access
 	  #:call-readlink
