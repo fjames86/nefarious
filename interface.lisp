@@ -35,6 +35,7 @@
     (otherwise :void)))
 
 (defun call-get-attr (handle &key (host *nfs-host*) (port *nfs-port*) protocol)
+  "Get file attributes"
   (let ((res (%call-get-attr handle :host host :port port :protocol protocol)))
     (if (eq (xunion-tag res) :ok)
 	(xunion-val res)
