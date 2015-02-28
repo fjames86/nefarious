@@ -1,3 +1,5 @@
+;;;; Copyright (c) Frank James 2015 <frank.a.james@gmail.com>
+;;;; This code is licensed under the MIT license.
 
 (defpackage #:nefarious.nlm4
   (:use #:cl #:frpc)
@@ -27,6 +29,9 @@
 (defconstant +nlm4-program+ 100021)
 (defconstant +nlm4-version+ 4)
 
+(defconstant +max-netobj+ 1024)
+(defxtype* netobj () (:varray* :octet +max-netobj+))
+
 (use-rpc-program +nlm4-program+ +nlm4-version+)
 
 (defxenum nlm4-stats 
@@ -41,6 +46,10 @@
    (:fbig 8)
    (:failed 9)))
 
+(defxstruct nlm4-res ()
+  ((cookie netobj)
+   (stat nlm4-stats)))
+
 (defxstruct nlm4-holder ()
   ((exclusive :boolean)
    (svid :int32)
@@ -52,7 +61,7 @@
   ((name :string)
    (fh netobj)
    (oh netobj)
-   (svid :int32)
+   (uppid :int32)
    (offset :uint64)
    (len :uint64)))
 
@@ -63,25 +72,80 @@
    (mode fsh4-mode)
    (access fsh4-mode)))
 
-;; not all the structures are defined in the spec-- wtf are they?
+(defxstruct nlm4-lock-args ()
+  ((cookie netobj)
+   (block :boolean)
+   (exclusive :boolean)
+   (alock nlm4-lock)
+   (reclaim :boolean)
+   (state :int32)))
 
-(defrpc call-null (:void :void) 0)
-(defrpc call-test (nlm4-test-args ntlm-test-res) 1)
-(defrpc call-lock (nlm4-lock-args nlm4-res) 2)
-(defrpc call-cancel (nlm4-cancel-args nlm4-res) 3)
-(defrpc call-unlock (nlm4-unlock-args nlm4-res) 4)
-(defrpc call-granted (nlm4-test-args nlm4-res) 5)
-(defrpc call-test-msg (nlm4-test-args :void) 6)
-(defrpc call-lock-msg (nlm4-lock-args :void) 7)
-(defrpc call-cancel-msg (nlm4-cancel-args :void) 8)
-(defrpc call-unlock-msg (nlm4-unlock-args :void) 9)
-(defrpc call-granted-msg (nlm4-test-args :void) 10)
-(defrpc call-test-res (nlm4-test-res :void) 11)
-(defrpc call-lock-res (nlm4-res :void) 12)
-(defrpc call-cancel-res (nlm4-res :void) 13)
-(defrpc call-unlock-res (nlm4-res :void) 14)
-(defrpc call-granted-res (nlm4-res :void) 15)
-(defrpc call-share (nlm4-share-args nlm4-share-res) 20)
-(defrpc call-nm-lock (nlm4-lock-args nlm4-res) 22)
-(defrpc call-free-all (nlm4-notify :void) 23)
+(defxstruct nlm4-cancel-args ()
+  ((cookie netobj)
+   (block :boolean)
+   (exclusive :boolean)
+   (alock nlm4-lock)))
+
+(defxstruct nlm4-test-args ()
+  ((cookie netobj)
+   (exclusive :boolean)
+   (alock nlm4-lock)))
+
+(defxstruct nlm4-test-res ()
+  ((cookie netobj)
+   (stat (:union nlm4-stats 
+	   (:denied nlm4-holder)
+	   (otherwise :void)))))
+
+(defxstruct nlm4-unlock-args ()
+  ((cookie netobj)
+   (alock nlm4-lock)))
+
+(defxenum fsh-mode 
+  ((:deny-none 0)
+   (:deny-read 1)
+   (:deny-write 2)
+   (:deny-rw 3)))
+
+(defxenum fsh-access 
+  ((:none 0)
+   (:read-only 1)
+   (:write-only 2)
+   (:read-write 3)))
+
+(defxstruct nlm4-share-args ()
+  ((cookie netobj)
+   (share nlm4-share)
+   (reclaim :boolean)))
+
+(defxstruct nlm4-share-res ()
+  ((cookie netobj)
+   (stat nlm4-stats)
+   (seqno :int32)))
+
+(defxstruct nlm4-notify ()
+  ((name :string)
+   (state :uint64)))
+
+;; ----------------
+
+(defrpc call-null 0 :void :void)
+(defrpc call-test 1 nlm4-test-args ntlm-test-res)
+(defrpc call-lock 2 nlm4-lock-args nlm4-res)
+(defrpc call-cancel 3 nlm4-cancel-args nlm4-res)
+(defrpc call-unlock 4 nlm4-unlock-args nlm4-res)
+(defrpc call-granted 5 nlm4-test-args nlm4-res)
+(defrpc call-test-msg 6 nlm4-test-args :void)
+(defrpc call-lock-msg 7 nlm4-lock-args :void)
+(defrpc call-cancel-msg 8 nlm4-cancel-args :void)
+(defrpc call-unlock-msg 9 nlm4-unlock-args :void)
+(defrpc call-granted-msg 10 nlm4-test-args :void)
+(defrpc call-test-res 11 nlm4-test-res :void)
+(defrpc call-lock-res 12 nlm4-res :void)
+(defrpc call-cancel-res 13 nlm4-res :void)
+(defrpc call-unlock-res 14 nlm4-res :void)
+(defrpc call-granted-res 15 nlm4-res :void)
+(defrpc call-share 20 nlm4-share-args nlm4-share-res)
+(defrpc call-nm-lock 22 nlm4-lock-args nlm4-res)
+(defrpc call-free-all 23 nlm4-notify :void)
 
