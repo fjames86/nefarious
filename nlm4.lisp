@@ -4,25 +4,25 @@
 (defpackage #:nefarious.nlm4
   (:use #:cl #:frpc)
   (:nicknames #:nfs.nlm)
-  (:export #:call-nlm4-null
-	   #:call-nlm4-test
-	   #:call-nlm4-lock
-	   #:call-nlm4-cancel
-	   #:call-nlm4-unlock
-	   #:call-nlm4-granted
-	   #:call-nlm4-test-msg
-	   #:call-nlm4-lock-msg
-	   #:call-nlm4-cancel-msg
-	   #:call-nlm4-unlock-msg
-	   #:call-nlm4-granted-msg
-	   #:call-nlm4-test-res
-	   #:call-nlm4-lock-res
-	   #:call-nlm4-cancel-res
-	   #:call-nlm4-unlock-res
-	   #:call-nlm4-granted-res
-	   #:call-nlm4-share
-	   #:call-nlm4-nm-lock
-	   #:call-nlm4-free-all))
+  (:export #:call-null
+	   #:call-test
+	   #:call-lock
+	   #:call-cancel
+	   #:call-unlock
+	   #:call-granted
+	   #:call-test-msg
+	   #:call-lock-msg
+	   #:call-cancel-msg
+	   #:call-unlock-msg
+	   #:call-granted-msg
+	   #:call-test-res
+	   #:call-lock-res
+	   #:call-cancel-res
+	   #:call-unlock-res
+	   #:call-granted-res
+	   #:call-share
+	   #:call-nm-lock
+	   #:call-free-all))
 
 (in-package #:nefarious.nlm4)
 
