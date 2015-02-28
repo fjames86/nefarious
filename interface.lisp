@@ -28,19 +28,19 @@
 ;;  ((:ok get-attr-res-ok)
 ;;   (otherwise :void)))
 
-(defrpc %call-getattr 1 
+(defrpc %call-get-attr 1 
   nfs-fh3 
   (:union nfs-stat3
     (:ok fattr3)
     (otherwise :void)))
 
-(defun call-getattr (handle &key (host *nfs-host*) (port *nfs-port*) protocol)
-  (let ((res (%call-getattr handle :host host :port port :protocol protocol)))
+(defun call-get-attr (handle &key (host *nfs-host*) (port *nfs-port*) protocol)
+  (let ((res (%call-get-attr handle :host host :port port :protocol protocol)))
     (if (eq (xunion-tag res) :ok)
 	(xunion-val res)
 	(error "GETATTR failed: ~A" (xunion-tag res)))))
  
-(defhandler %handle-getattr (fh 1)
+(defhandler %handle-get-attr (fh 1)
   (let ((handle (find-handle fh)))
     (if handle
 	(make-xunion :ok
@@ -71,19 +71,22 @@
 ;;   (new-attrs sattr3)
 ;;   (guard sattr-guard)))
 
-(defrpc %call-setattr 2 
+(defrpc %call-set-attr 2 
   (:list nfs-fh3 sattr3 (:optional nfs-time3))
   (:union nfs-stat3
     (:ok wcc-data)
     (otherwise wcc-data)))
 
-(defun call-setattr (handle attr &key (host *nfs-host*) (port *nfs-port*) time protocol)
-  (%call-setattr (list handle attr time) 
-		 :host host 
-		 :port port
-		 :protocol protocol))
+(defun call-set-attr (handle attr &key (host *nfs-host*) (port *nfs-port*) time protocol)
+  (let ((res (%call-set-attr (list handle attr time) 
+			    :host host 
+			    :port port
+			    :protocol protocol)))
+    (if (eq (xunion-tag res) :ok)
+	(xunion-val res)
+	(error "SETATTR failed: ~A" (xunion-tag res)))))
 
-;;(defhandler %handle-setattr (args 2)
+;;(defhandler %handle-set-attr (args 2)
 ;;  (destructuring-bind (fh new-attrs guard) args
 ;;    (declare (ignore fh new-attrs guard))
 ;;    (make-xunion :ok (make-wcc-data))))
@@ -146,14 +149,21 @@
     (otherwise post-op-attr)))
 
 (defun call-access (handle access &key (host *nfs-host*) (port *nfs-port*) protocol)
-  (%call-access (list handle access)
+  "ACCESS can be either an integer which is a bitwise OR of NFS-ACCESS flags, or a list 
+of NFS-ACCESS flag symbols."
+  (%call-access (list handle
+		      (if (integerp access)
+			  access
+			  (reduce (lambda (val sym)
+				    (logior val (enum 'nfs-access sym)))
+				  access)))
 		:host host
 		:port port
 		:protocol protocol))
 
 (defhandler %handle-access (args 4)
-  (destructuring-bind (object access) args
-    (declare (ignore object))
+  (destructuring-bind (fh access) args
+    (declare (ignore fh))
     (make-xunion :ok (list nil access))))
 
 ;; ------------------------------------------------------
@@ -167,12 +177,15 @@
     (otherwise post-op-attr)))
 
 (defun call-readlink (handle &key (host *nfs-host*) (port *nfs-port*) protocol)
-  (%call-readlink handle :host host :port port :protocol protocol))
+  (let ((res (%call-readlink handle :host host :port port :protocol protocol)))
+    (if (eq (xunion-tag res) :ok)
+	(destructuring-bind (attr path) (xunion-val res)
+	  (values attr path))
+	(error "READLINK failed: ~A" (xunion-tag res)))))
 
 (defhandler %handle-readlink (handle 5)
   (declare (ignore handle))
   (make-xunion :ok (list nil "")))
-
 
 ;; ------------------------------------------------------
 ;; read -- read from file
@@ -324,11 +337,15 @@
     (otherwise wcc-data)))
 
 (defun call-mkdir (dhandle filename &key sattr (host *nfs-host*) (port *nfs-port*) protocol)
-  (%call-mkdir (list (make-dir-op-args3 :dir dhandle :name filename)
-		     (or sattr (make-sattr3)))
-	       :host host
-	       :port port
-	       :protocol protocol))
+  (let ((res (%call-mkdir (list (make-dir-op-args3 :dir dhandle :name filename)
+				(or sattr (make-sattr3)))
+			  :host host
+			  :port port
+			  :protocol protocol)))
+    (if (eq (xunion-tag res) :ok)
+	(destructuring-bind (fh attr wcc) (xunion-val res)
+	  (values fh attr wcc))
+	(error "MKDIR failed: ~A" (xunion-tag res)))))
 
 (defhandler %handle-mkdir (args 9)
   (destructuring-bind (dir-op attrs) args
@@ -364,13 +381,17 @@
 FILENAME: name to be associated with the link.
 PATH: the symbolic link data.
 ATTRS: initial attributes for the symlink."
-  (%call-create-symlink (list (make-dir-op-args3 :dir dhandle 
-						 :name filename)
-			      attrs
-			      path)
-			:host host
-			:port port
-			:protocol protocol))
+  (let ((res (%call-create-symlink (list (make-dir-op-args3 :dir dhandle 
+							    :name filename)
+					 attrs
+					 path)
+				   :host host
+				   :port port
+				   :protocol protocol)))
+    (if (eq (xunion-tag res) :ok)
+	(destructuring-bind (fh attr wcc) (xunion-val res)
+	  (values fh attr wcc))
+	(error "CREATE-SYMLINK failed: ~A" (xunion-tag res)))))
 
 ;;(defhandler %handle-create-symlink (args 10)
 ;;  (destructuring-bind (dirop attrs path) args
@@ -392,14 +413,18 @@ ATTRS: initial attributes for the symlink."
     (otherwise wcc-data)))
 
 (defun call-mknod (dhandle filename &key (host *nfs-host*) (port *nfs-port*) sattr specdata (ftype :reg) protocol)
-  (%call-mknod (list (make-dir-op-args3 :dir dhandle :name filename)
-		     (make-xunion ftype
-				  (case ftype
-				    ((:chr :blk) (list sattr specdata))
-				    ((:sock :fifo) sattr))))
-	       :host host
-	       :port port
-	       :protocol protocol))
+  (let ((res (%call-mknod (list (make-dir-op-args3 :dir dhandle :name filename)
+				(make-xunion ftype
+					     (case ftype
+					       ((:chr :blk) (list sattr specdata))
+					       ((:sock :fifo) sattr))))
+			  :host host
+			  :port port
+			  :protocol protocol)))
+    (if (eq (xunion-tag res) :ok)
+	(destructuring-bind (fh attr wcc) (xunion-val res)
+	  (values fh attr wcc))
+	(error "MKNOD failed: ~A" (xunion-tag res)))))
 
 ;; dont support this
 ;;(defhandler %handle-mknod (args 11)
@@ -419,11 +444,14 @@ ATTRS: initial attributes for the symlink."
     (otherwise wcc-data)))
 
 (defun call-remove (dhandle filename &key (host *nfs-host*) (port *nfs-port*) protocol)
-  (%call-remove (make-dir-op-args3 :dir dhandle :name filename)
-		:host host
-		:port port
-		:protocol protocol))
-
+  (let ((res (%call-remove (make-dir-op-args3 :dir dhandle :name filename)
+			   :host host
+			   :port port
+			   :protocol protocol)))
+    (if (eq (xunion-tag res) :ok)
+	(xunion-val res)
+	(error "REMOVE failed: ~A" (xunion-tag res)))))
+	
 (defhandler %handle-remove (args 12)
   (with-slots (dir name) args
     (let ((dhandle (find-handle dir)))
@@ -445,10 +473,13 @@ ATTRS: initial attributes for the symlink."
     (otherwise wcc-data)))
 
 (defun call-rmdir (dhandle name &key (host *nfs-host*) (port *nfs-port*) protocol)
-  (%call-rmdir (make-dir-op-args3 :dir dhandle :name name)
-	       :host host
-	       :port port
-	       :protocol protocol))
+  (let ((res (%call-rmdir (make-dir-op-args3 :dir dhandle :name name)
+			  :host host
+			  :port port
+			  :protocol protocol)))
+    (if (eq (xunion-tag res) :ok)
+	(xunion-val res)
+	(error "RMDIR failed: ~A" (xunion-tag res)))))
 
 (defhandler %handle-rmdir (args 13)
   (with-slots (dir name) args
@@ -470,13 +501,17 @@ ATTRS: initial attributes for the symlink."
     (otherwise (:list wcc-data wcc-data))))
 
 (defun call-rename (from-dhandle from-filename to-filename &key to-dhandle (host *nfs-host*) (port *nfs-port*) protocol)
-  (%call-rename (list (make-dir-op-args3 :dir from-dhandle 
-					 :name from-filename)
-		      (make-dir-op-args3 :dir (or to-dhandle from-dhandle)
-					 :name to-filename))
-		:host host
-		:port port
-		:protocol protocol))
+  (let ((res (%call-rename (list (make-dir-op-args3 :dir from-dhandle 
+						    :name from-filename)
+				 (make-dir-op-args3 :dir (or to-dhandle from-dhandle)
+						    :name to-filename))
+			   :host host
+			   :port port
+			   :protocol protocol)))
+    (if (eq (xunion-tag res) :ok)
+	(destructuring-bind (wcc1 wcc2) (xunion-val res)
+	  (values wcc1 wcc2))
+	(error "RENAME failed: ~A" (xunion-tag res)))))
 
 (defhandler %handle-rename (args 14)
   (destructuring-bind (from to) args
@@ -506,11 +541,15 @@ ATTRS: initial attributes for the symlink."
     (otherwise (:list post-op-attr wcc-data))))
 
 (defun call-link (handle dhandle filename &key (host *nfs-host*) (port *nfs-port*) protocol)
-  (%call-link (list handle (make-dir-op-args3 :dir dhandle :name filename))
-	      :host host
-	      :port port
-	      :protocol protocol))
-
+  (let ((res (%call-link (list handle (make-dir-op-args3 :dir dhandle :name filename))
+			 :host host
+			 :port port
+			 :protocol protocol)))
+    (if (eq (xunion-tag res) :ok)
+	(destructuring-bind (attr wcc) (xunion-val res)
+	  (values attr wcc))
+	(error "LINK failed: ~A" (xunion-tag res)))))
+	
 ;;(defhandler %handle-link (args 15)
 ;;  (destructuring-bind (handle dirop) args
 ;;    (declare (ignore handle dirop))
@@ -554,7 +593,7 @@ ATTRS: initial attributes for the symlink."
 		      (elist nil))
 		     ((null entries) elist)
 		   (push (%entry3-entry entries) elist)))))
-	res)))
+	(error "READ-DIR failed: ~A" (xunion-tag res)))))
 		
 
 (defhandler %handle-read-dir (args 16)
@@ -605,11 +644,14 @@ ATTRS: initial attributes for the symlink."
    (name filename3)
    (cookie cookie3 0)
    (attrs post-op-attr)
-   (handle post-op-fh3)
-   (next-entry (:optional entry3-plus))))
+   (handle post-op-fh3)))
+
+(defxstruct %entry3-plus ()
+  ((entry entry3-plus)
+   (next-entry (:optional %entry3-plus))))
 
 (defxstruct dir-list3-plus ()
-  ((entries (:optional entry3-plus))
+  ((entries (:optional %entry3-plus))
    (eof :boolean)))
 
 ;; READDIRPLUS3res NFSPROC3_READDIRPLUS(READDIRPLUS3args) = 17;
@@ -620,16 +662,55 @@ ATTRS: initial attributes for the symlink."
     (otherwise post-op-attr)))
 
 (defun call-read-dir-plus (dhandle count &key max (cookie 0) verf (host *nfs-host*) (port *nfs-port*) protocol)
-  (%call-read-dir-plus (list dhandle cookie (or verf (make-cookie-verf3)) count (or max count))
-		       :host host
-		       :port port
-		       :protocol protocol))
+  (let ((res (%call-read-dir-plus (list dhandle cookie (or verf (make-cookie-verf3)) count (or max count))
+				  :host host
+				  :port port
+				  :protocol protocol)))
+    (if (eq (xunion-tag res) :ok)
+	(destructuring-bind (attr cverf dlist) (xunion-val res)
+	  (list attr cverf 
+		(make-dir-list3-plus 
+		 :eof (dir-list3-plus-eof dlist)
+		 :entries
+		 (do ((entries (dir-list3-plus-entries dlist) (%entry3-plus-next-entry entries))
+		      (elist nil))
+		     ((null entries) elist)
+		   (push (%entry3-plus-entry entries) elist)))))
+	(error "READ-DIR-PLUS failed: ~A" (xunion-tag res)))))
+
 
 (defhandler %handle-read-dir-plus (args 17)
-  (destructuring-bind (dir cookie verf count max) args
-    (declare (ignore dir cookie count max))
-    (make-xunion :ok 
-		 (list nil verf (make-dir-list3-plus :eof t)))))
+  (destructuring-bind (dh cookie verf count max) args
+    (declare (ignore cookie verf count max))
+    (let ((dhandle (find-handle dh)))
+      (if dhandle 
+	  (let ((files (cl-fad:list-directory (handle-pathname dhandle)))
+		(dlist3 (make-dir-list3-plus :eof t)))
+	    (do ((%files files (cdr %files))
+		 (fileid 0 (1+ fileid)))
+		((null %files))
+	      (let* ((path (car %files))
+		     (handle (allocate-handle dhandle (or (pathname-name path)
+							  (car (last (pathname-directory path)))))))
+		(when handle 
+		  (setf (dir-list3-plus-entries dlist3)
+			(make-%entry3-plus :entry 
+					   (make-entry3-plus :fileid fileid
+							     :name (if (cl-fad:directory-pathname-p path)
+								       (car (last (pathname-directory path)))
+								       (format nil "~A~A~A" 
+									       (pathname-name path)
+									       (if (pathname-type path)
+										   "."
+										   "")
+									       (if (pathname-type path)
+										   (pathname-type path)
+										   "")))
+							     :handle (handle-fh handle))
+					   :next-entry (dir-list3-plus-entries dlist3))))))
+	    (make-xunion :ok 
+			 (list nil (make-cookie-verf3) dlist3)))
+	  (make-xunion :bad-handle nil)))))
 
 ;; ------------------------------------------------------
 ;; fs stat -- get dynamic filesystem info
@@ -652,7 +733,10 @@ ATTRS: initial attributes for the symlink."
     (otherwise post-op-attr)))
 
 (defun call-fs-stat (handle &key (host *nfs-host*) (port *nfs-port*) protocol)
-  (%call-fs-stat handle :host host :port port :protocol protocol))
+  (let ((res (%call-fs-stat handle :host host :port port :protocol protocol)))
+    (if (eq (xunion-tag res) :ok)
+	(xunion-val res)
+	(error "FS-STAT failed: ~A" (xunion-tag res)))))
 
 (defhandler %handle-fs-stat (handle 18)
   (declare (ignore handle))
@@ -688,7 +772,10 @@ ATTRS: initial attributes for the symlink."
     (otherwise post-op-attr)))
 
 (defun call-fs-info (handle &key (host *nfs-host*) (port *nfs-port*) protocol)
-  (%call-fs-info handle :host host :port port :protocol protocol))
+  (let ((res (%call-fs-info handle :host host :port port :protocol protocol)))
+    (if (eq (xunion-tag res) :ok)
+	(xunion-val res)
+	(error "FS-INFO failed: ~A" (xunion-tag res)))))
 
 (defhandler %handle-fs-info (handle 19)
   (declare (ignore handle))
@@ -714,11 +801,15 @@ ATTRS: initial attributes for the symlink."
     (otherwise post-op-attr)))
 
 (defun call-path-conf (handle &key (host *nfs-host*) (port *nfs-port*) protocol)
-  (%call-path-conf handle :host host :port port :protocol protocol))
+  (let ((res (%call-path-conf handle :host host :port port :protocol protocol)))
+    (if (eq (xunion-tag res) :ok)
+	(xunion-val res)
+	(error "PATH-CONF failed: ~A" (xunion-tag res)))))
 
 (defhandler %handle-path-conf (handle 20)
   (declare (ignore handle))
-  (make-xunion :ok (make-path-conf)))
+  (make-xunion :ok (make-path-conf :name-max 255
+				   :link-max 255)))
 
 
 ;; ------------------------------------------------------
@@ -732,7 +823,11 @@ ATTRS: initial attributes for the symlink."
     (otherwise wcc-data)))
 
 (defun call-commit (handle offset count &key (host *nfs-host*) (port *nfs-port*) protocol)
-  (%call-commit (list handle offset count) :host host :port port :protocol protocol))
+  (let ((res (%call-commit (list handle offset count) :host host :port port :protocol protocol)))
+    (if (eq (xunion-tag res) :ok)
+	(destructuring-bind (wcc verf) (xunion-val res)
+	  (values wcc verf))
+	(error "COMMIT failed: ~A" (xunion-tag res)))))
 
 
 ;; dont support this
