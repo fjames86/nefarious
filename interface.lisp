@@ -3,16 +3,12 @@
 
 (in-package #:nefarious)
 
-(defparameter *nfs-host* "localhost")
-(defparameter *nfs-port* 2049)
-
 (use-rpc-program +nfs-program+ +nfs-version+)
+(use-rpc-port 2049)
 
 ;; ------------------------------------------------------
 ;; void NFSPROC3_NULL(void)                    = 0;
-(defrpc %call-null 0 :void :void)
-(defun call-null (&key (host *nfs-host*) (port *nfs-port*) protocol)
-  (%call-null nil :host host :port port :protocol protocol))
+(defrpc call-null 0 :void :void)
 
 (defhandler %handle-null (void 0)
   (declare (ignore void))
@@ -28,18 +24,17 @@
 ;;  ((:ok get-attr-res-ok)
 ;;   (otherwise :void)))
 
-(defrpc %call-get-attr 1 
+(defrpc call-get-attr 1 
   nfs-fh3 
   (:union nfs-stat3
     (:ok fattr3)
-    (otherwise :void)))
-
-(defun call-get-attr (handle &key (host *nfs-host*) (port *nfs-port*) protocol)
-  "Get file attributes"
-  (let ((res (%call-get-attr handle :host host :port port :protocol protocol)))
+    (otherwise :void))
+  (:arg-transformer (handle) handle)
+  (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(xunion-val res)
-	(error "GETATTR failed: ~A" (xunion-tag res)))))
+	(error "GETATTR failed: ~A" (xunion-tag res))))
+  (:documentation "Get file attributes"))
  
 (defhandler %handle-get-attr (fh 1)
   (let ((handle (find-handle fh)))
@@ -72,20 +67,17 @@
 ;;   (new-attrs sattr3)
 ;;   (guard sattr-guard)))
 
-(defrpc %call-set-attr 2 
+(defrpc call-set-attr 2 
   (:list nfs-fh3 sattr3 (:optional nfs-time3))
   (:union nfs-stat3
     (:ok wcc-data)
-    (otherwise wcc-data)))
-
-(defun call-set-attr (handle attr &key (host *nfs-host*) (port *nfs-port*) time protocol)
-  (let ((res (%call-set-attr (list handle attr time) 
-			    :host host 
-			    :port port
-			    :protocol protocol)))
+    (otherwise wcc-data))
+  (:arg-transformer (handle attr &key time) (list handle attr time))
+  (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(xunion-val res)
-	(error "SETATTR failed: ~A" (xunion-tag res)))))
+	(error "SETATTR failed: ~A" (xunion-tag res))))
+  (:documentation "Set attributes"))
 
 ;;(defhandler %handle-set-attr (args 2)
 ;;  (destructuring-bind (fh new-attrs guard) args
@@ -97,17 +89,14 @@
 ;; LOOKUP3res NFSPROC3_LOOKUP(LOOKUP3args)           = 3;
 
 ;; lookup -- lookup filename
-(defrpc %call-lookup 3
+(defrpc call-lookup 3
   dir-op-args3 
   (:union nfs-stat3
     (:ok (:list nfs-fh3 post-op-attr post-op-attr))
-    (otherwise post-op-attr)))
-
-(defun call-lookup (dhandle filename &key (host *nfs-host*) (port *nfs-port*) protocol)
-  (let ((res (%call-lookup (make-dir-op-args3 :dir dhandle :name filename)
-			   :host host
-			   :port port
-			   :protocol protocol)))
+    (otherwise post-op-attr))
+  (:arg-transformer (dhandle filename) 
+    (make-dir-op-args3 :dir dhandle :name filename))
+  (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(destructuring-bind (fh attr1 attr2) (xunion-val res)
 	  (values fh attr1 attr2))
@@ -143,24 +132,20 @@
 ;;  ((object nfs-fh3)
 ;;   (access :uint32)))
 
-(defrpc %call-access 4 
+(defrpc call-access 4 
   (:list nfs-fh3 :uint32)
   (:union nfs-stat3 
     (:ok (:list post-op-attr :uint32))
-    (otherwise post-op-attr)))
-
-(defun call-access (handle access &key (host *nfs-host*) (port *nfs-port*) protocol)
-  "ACCESS can be either an integer which is a bitwise OR of NFS-ACCESS flags, or a list 
-of NFS-ACCESS flag symbols."
-  (%call-access (list handle
-		      (if (integerp access)
-			  access
-			  (reduce (lambda (val sym)
-				    (logior val (enum 'nfs-access sym)))
-				  access)))
-		:host host
-		:port port
-		:protocol protocol))
+    (otherwise post-op-attr))
+  (:arg-transformer (handle access)
+    (list handle
+	  (if (integerp access)
+	      access
+	      (reduce (lambda (val sym)
+			(logior val (enum 'nfs-access sym)))
+		      access))))
+  (:documentation "ACCESS can be either an integer which is a bitwise OR of NFS-ACCESS flags, or a list 
+of NFS-ACCESS flag symbols."))
 
 (defhandler %handle-access (args 4)
   (destructuring-bind (fh access) args
@@ -171,14 +156,13 @@ of NFS-ACCESS flag symbols."
 ;; readlink -- read from symbolic link
 ;; READLINK3res NFSPROC3_READLINK(READLINK3args)       = 5;
 
-(defrpc %call-readlink 5 
+(defrpc call-readlink 5 
   nfs-fh3
   (:union nfs-stat3
     (:ok (:list post-op-attr nfs-path3))
-    (otherwise post-op-attr)))
-
-(defun call-readlink (handle &key (host *nfs-host*) (port *nfs-port*) protocol)
-  (let ((res (%call-readlink handle :host host :port port :protocol protocol)))
+    (otherwise post-op-attr))
+  (:arg-transformer (handle) handle)
+  (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(destructuring-bind (attr path) (xunion-val res)
 	  (values attr path))
@@ -192,20 +176,17 @@ of NFS-ACCESS flag symbols."
 ;; read -- read from file
 ;; READ3res NFSPROC3_READ(READ3args)               = 6;
 
-(defrpc %call-read 6 
+(defrpc call-read 6 
   (:list nfs-fh3 offset3 count3)
   (:union nfs-stat3
     (:ok (:list post-op-attr
 		count3
 		:boolean
 		(:varray* :octet)))
-    (otherwise post-op-attr)))
-
-(defun call-read (handle offset count &key (host *nfs-host*) (port *nfs-port*) protocol)
-  (let ((res (%call-read (list handle offset count)
-			 :host host 
-			 :port port
-			 :protocol protocol)))
+    (otherwise post-op-attr))
+  (:arg-transformer (handle offset count)
+    (list handle offset count))
+  (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(destructuring-bind (attr count eof data) (xunion-val res)
 	  (declare (ignore count))
@@ -235,17 +216,14 @@ of NFS-ACCESS flag symbols."
    (:data-sync 1)
    (:file-sync 2)))
 
-(defrpc %call-write 7 
+(defrpc call-write 7 
   (:list nfs-fh3 offset3 count3 stable-how (:varray* :octet))
   (:union nfs-stat3
     (:ok (:list wcc-data count3 stable-how write-verf3))
-    (otherwise wcc-data)))
-
-(defun call-write (handle offset data &key (host *nfs-host*) (port *nfs-port*) (stable :file-sync) protocol)
-  (let ((res (%call-write (list handle offset (length data) stable data)
-			  :host host
-			  :port port
-			  :protocol protocol)))
+    (otherwise wcc-data))
+  (:arg-transformer (handle offset data &key (stable :file-sync))
+    (list handle offset (length data) stable data))
+  (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(xunion-val res)
 	(error "WRITE failed: ~A" (xunion-tag res)))))
@@ -290,26 +268,23 @@ of NFS-ACCESS flag symbols."
 ;;  ((:ok create-res-ok)
 ;;   (otherwise create-res-fail)))
 
-(defrpc %call-create 8 
+(defrpc call-create 8 
   (:list dir-op-args3 
 	 (:union create-mode3 
 	   ((:unchecked :guared) sattr3)
 	   (:exclusive created-verf3)))
   (:union nfs-stat3
     (:ok (:list post-op-fh3 post-op-attr wcc-data))
-    (otherwise wcc-data)))
-
-(defun call-create (dhandle filename &key (host *nfs-host*) (port *nfs-port*) (mode :unchecked) sattr verf protocol)
-  (let ((res (%call-create (list (make-dir-op-args3 :dir dhandle :name filename)
-				 (make-xunion mode 
-					      (ecase mode
-						((:unchecked :guarded) 
-						 (or sattr (make-sattr3)))
-						(:exclusive 
-						 (or verf (make-create-verf3))))))
-			   :host host
-			   :port port
-			   :protocol protocol)))
+    (otherwise wcc-data))
+  (:arg-transformer (dhandle filename &key (mode :unchecked) sattr create-verf)
+    (list (make-dir-op-args3 :dir dhandle :name filename)
+	  (make-xunion mode 
+		       (ecase mode
+			 ((:unchecked :guarded) 
+			  (or sattr (make-sattr3)))
+			 (:exclusive 
+			  (or create-verf (make-create-verf3)))))))
+  (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(destructuring-bind (fh attr wcc) (xunion-val res)
 	  (values fh attr wcc))
@@ -331,18 +306,15 @@ of NFS-ACCESS flag symbols."
 ;; mkdir -- create a directory 
 ;; MKDIR3res NFSPROC3_MKDIR(MKDIR3args)             = 9;
 
-(defrpc %call-mkdir 9 
+(defrpc call-mkdir 9 
   (:list dir-op-args3 sattr3) 
   (:union nfs-stat3
     (:ok (:list post-op-fh3 post-op-attr wcc-data))
-    (otherwise wcc-data)))
-
-(defun call-mkdir (dhandle filename &key sattr (host *nfs-host*) (port *nfs-port*) protocol)
-  (let ((res (%call-mkdir (list (make-dir-op-args3 :dir dhandle :name filename)
-				(or sattr (make-sattr3)))
-			  :host host
-			  :port port
-			  :protocol protocol)))
+    (otherwise wcc-data))
+  (:arg-transformer (dhandle filename &key sattr)
+    (list (make-dir-op-args3 :dir dhandle :name filename)
+	  (or sattr (make-sattr3))))
+  (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(destructuring-bind (fh attr wcc) (xunion-val res)
 	  (values fh attr wcc))
@@ -371,28 +343,32 @@ of NFS-ACCESS flag symbols."
 ;;  (:alist (:attrs sattr3)
 ;;	  (:data nfs-path3)))
 
-(defrpc %call-create-symlink 10 
+(defrpc call-create-symlink 10 
   (:list dir-op-args3 sattr3 nfs-path3)
   (:union nfs-stat3
     (:ok (:list post-op-fh3 post-op-attr wcc-data))
-    (otherwise wcc-data)))
-
-(defun call-create-symlink (dhandle filename path &key attrs (host *nfs-host*) (port *nfs-port*) protocol)
-  "DHANDLE: directory handle to create symlink in. 
-FILENAME: name to be associated with the link.
-PATH: the symbolic link data.
-ATTRS: initial attributes for the symlink."
-  (let ((res (%call-create-symlink (list (make-dir-op-args3 :dir dhandle 
-							    :name filename)
-					 attrs
-					 path)
-				   :host host
-				   :port port
-				   :protocol protocol)))
+    (otherwise wcc-data))
+  (:arg-transformer (dhandle filename path &key attrs)
+    (list (make-dir-op-args3 :dir dhandle 
+			     :name filename)
+	  attrs
+	  path))
+  (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(destructuring-bind (fh attr wcc) (xunion-val res)
 	  (values fh attr wcc))
-	(error "CREATE-SYMLINK failed: ~A" (xunion-tag res)))))
+	(error "CREATE-SYMLINK failed: ~A" (xunion-tag res))))
+  (:documentation 
+  "Create a symblink.
+
+DHANDLE: directory handle to create symlink in. 
+
+FILENAME: name to be associated with the link.
+
+PATH: the symbolic link data.
+
+ATTRS: initial attributes for the symlink."))
+
 
 ;;(defhandler %handle-create-symlink (args 10)
 ;;  (destructuring-bind (dirop attrs path) args
@@ -403,7 +379,7 @@ ATTRS: initial attributes for the symlink."
 ;; mknod -- create special device
 ;; MKNOD3res NFSPROC3_MKNOD(MKNOD3args)             = 11;
 
-(defrpc %call-mknod 11 
+(defrpc call-mknod 11 
   (:list dir-op-args3 
 	 (:union ftype3
 	   ((:chr :blk) (:list sattr3 specdata3))
@@ -411,21 +387,19 @@ ATTRS: initial attributes for the symlink."
 	   (otherwise :void)))
   (:union nfs-stat3 
     (:ok (:list post-op-fh3 post-op-attr wcc-data))
-    (otherwise wcc-data)))
-
-(defun call-mknod (dhandle filename &key (host *nfs-host*) (port *nfs-port*) sattr specdata (ftype :reg) protocol)
-  (let ((res (%call-mknod (list (make-dir-op-args3 :dir dhandle :name filename)
-				(make-xunion ftype
-					     (case ftype
-					       ((:chr :blk) (list sattr specdata))
-					       ((:sock :fifo) sattr))))
-			  :host host
-			  :port port
-			  :protocol protocol)))
+    (otherwise wcc-data))
+  (:arg-transformer (dhandle filename &key sattr specdata (ftype :reg))
+    (list (make-dir-op-args3 :dir dhandle :name filename)
+	  (make-xunion ftype
+		       (case ftype
+			 ((:chr :blk) (list sattr specdata))
+			 ((:sock :fifo) sattr)))))
+  (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(destructuring-bind (fh attr wcc) (xunion-val res)
 	  (values fh attr wcc))
-	(error "MKNOD failed: ~A" (xunion-tag res)))))
+	(error "MKNOD failed: ~A" (xunion-tag res))))
+  (:documentation "Create special device."))
 
 ;; dont support this
 ;;(defhandler %handle-mknod (args 11)
@@ -438,20 +412,18 @@ ATTRS: initial attributes for the symlink."
 ;; remove -- remove a file
 
 ;; REMOVE3res NFSPROC3_REMOVE(REMOVE3args)           = 12;
-(defrpc %call-remove 12 
+(defrpc call-remove 12 
   dir-op-args3
   (:union nfs-stat3
     (:ok wcc-data)
-    (otherwise wcc-data)))
-
-(defun call-remove (dhandle filename &key (host *nfs-host*) (port *nfs-port*) protocol)
-  (let ((res (%call-remove (make-dir-op-args3 :dir dhandle :name filename)
-			   :host host
-			   :port port
-			   :protocol protocol)))
+    (otherwise wcc-data))
+  (:arg-transformer (dhandle filename)
+    (make-dir-op-args3 :dir dhandle :name filename))
+  (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(xunion-val res)
-	(error "REMOVE failed: ~A" (xunion-tag res)))))
+	(error "REMOVE failed: ~A" (xunion-tag res))))
+  (:documentation "Remove a file."))
 	
 (defhandler %handle-remove (args 12)
   (with-slots (dir name) args
@@ -467,17 +439,14 @@ ATTRS: initial attributes for the symlink."
 
 
 ;; RMDIR3res NFSPROC3_RMDIR(RMDIR3args)             = 13;
-(defrpc %call-rmdir 13 
+(defrpc call-rmdir 13 
   dir-op-args3
   (:union nfs-stat3
     (:ok wcc-data)
-    (otherwise wcc-data)))
-
-(defun call-rmdir (dhandle name &key (host *nfs-host*) (port *nfs-port*) protocol)
-  (let ((res (%call-rmdir (make-dir-op-args3 :dir dhandle :name name)
-			  :host host
-			  :port port
-			  :protocol protocol)))
+    (otherwise wcc-data))
+  (:arg-transformer (dhandle name)
+    (make-dir-op-args3 :dir dhandle :name name))
+  (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(xunion-val res)
 	(error "RMDIR failed: ~A" (xunion-tag res)))))
@@ -495,20 +464,17 @@ ATTRS: initial attributes for the symlink."
 ;; rename -- rename a file or directory 
 
 ;; RENAME3res NFSPROC3_RENAME(RENAME3args)           = 14;
-(defrpc %call-rename 14 
+(defrpc call-rename 14 
   (:list dir-op-args3 dir-op-args3)
   (:union nfs-stat3
     (:ok (:list wcc-data wcc-data))
-    (otherwise (:list wcc-data wcc-data))))
-
-(defun call-rename (from-dhandle from-filename to-filename &key to-dhandle (host *nfs-host*) (port *nfs-port*) protocol)
-  (let ((res (%call-rename (list (make-dir-op-args3 :dir from-dhandle 
+    (otherwise (:list wcc-data wcc-data)))
+  (:arg-transformer (from-dhandle from-filename to-filename &key to-dhandle)
+    (list (make-dir-op-args3 :dir from-dhandle 
 						    :name from-filename)
 				 (make-dir-op-args3 :dir (or to-dhandle from-dhandle)
-						    :name to-filename))
-			   :host host
-			   :port port
-			   :protocol protocol)))
+						    :name to-filename)))
+  (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(destructuring-bind (wcc1 wcc2) (xunion-val res)
 	  (values wcc1 wcc2))
@@ -535,17 +501,14 @@ ATTRS: initial attributes for the symlink."
 ;; link -- create a link to a file
 
 ;; LINK3res NFSPROC3_LINK(LINK3args)               = 15;
-(defrpc %call-link 15 
+(defrpc call-link 15 
   (:list nfs-fh3 dir-op-args3)
   (:union nfs-stat3
     (:ok (:list post-op-attr wcc-data))
-    (otherwise (:list post-op-attr wcc-data))))
-
-(defun call-link (handle dhandle filename &key (host *nfs-host*) (port *nfs-port*) protocol)
-  (let ((res (%call-link (list handle (make-dir-op-args3 :dir dhandle :name filename))
-			 :host host
-			 :port port
-			 :protocol protocol)))
+    (otherwise (:list post-op-attr wcc-data)))
+  (:arg-transformer (handle dhandle filename)
+    (list handle (make-dir-op-args3 :dir dhandle :name filename)))
+  (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(destructuring-bind (attr wcc) (xunion-val res)
 	  (values attr wcc))
@@ -573,17 +536,14 @@ ATTRS: initial attributes for the symlink."
    (eof :boolean)))
 
 ;; READDIR3res NFSPROC3_READDIR(READDIR3args)         = 16;
-(defrpc %call-read-dir 16 
+(defrpc call-read-dir 16 
   (:list nfs-fh3 cookie3 cookie-verf3 count3)
   (:union nfs-stat3
     (:ok (:list post-op-attr cookie-verf3 dir-list3))
-    (otherwise post-op-attr)))
-
-(defun call-read-dir (dhandle &key verf (cookie 0) (count 65536) (host *nfs-host*) (port *nfs-port*) protocol)
-  (let ((res (%call-read-dir (list dhandle cookie (or verf (make-cookie-verf3)) count)
-			     :host host
-			     :port port
-			     :protocol protocol)))
+    (otherwise post-op-attr))
+  (:arg-transformer (dhandle &key cookie-verf (cookie 0) (count 65536))
+    (list dhandle cookie (or cookie-verf (make-cookie-verf3)) count))
+  (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(destructuring-bind (attr cverf dlist) (xunion-val res)
 	  (list attr cverf 
@@ -656,17 +616,14 @@ ATTRS: initial attributes for the symlink."
    (eof :boolean)))
 
 ;; READDIRPLUS3res NFSPROC3_READDIRPLUS(READDIRPLUS3args) = 17;
-(defrpc %call-read-dir-plus 17 
+(defrpc call-read-dir-plus 17 
   (:list nfs-fh3 cookie3 cookie-verf3 count3 count3)
   (:union nfs-stat3
     (:ok (:list post-op-attr cookie-verf3 dir-list3-plus))
-    (otherwise post-op-attr)))
-
-(defun call-read-dir-plus (dhandle count &key max (cookie 0) verf (host *nfs-host*) (port *nfs-port*) protocol)
-  (let ((res (%call-read-dir-plus (list dhandle cookie (or verf (make-cookie-verf3)) count (or max count))
-				  :host host
-				  :port port
-				  :protocol protocol)))
+    (otherwise post-op-attr))
+  (:arg-transformer (dhandle count &key max (cookie 0) cookie-verf)
+    (list dhandle cookie (or cookie-verf (make-cookie-verf3)) count (or max count)))
+  (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(destructuring-bind (attr cverf dlist) (xunion-val res)
 	  (list attr cverf 
@@ -678,7 +635,6 @@ ATTRS: initial attributes for the symlink."
 		     ((null entries) elist)
 		   (push (%entry3-plus-entry entries) elist)))))
 	(error "READ-DIR-PLUS failed: ~A" (xunion-tag res)))))
-
 
 (defhandler %handle-read-dir-plus (args 17)
   (destructuring-bind (dh cookie verf count max) args
@@ -727,14 +683,13 @@ ATTRS: initial attributes for the symlink."
    (invarsec :uint32 0)))
 
 ;; FSSTAT3res NFSPROC3_FSSTAT(FSSTAT3args)           = 18;
-(defrpc %call-fs-stat 18 
+(defrpc call-fs-stat 18 
   nfs-fh3 
   (:union nfs-stat3
     (:ok fs-stat)
-    (otherwise post-op-attr)))
-
-(defun call-fs-stat (handle &key (host *nfs-host*) (port *nfs-port*) protocol)
-  (let ((res (%call-fs-stat handle :host host :port port :protocol protocol)))
+    (otherwise post-op-attr))
+  (:arg-transformer (handle) handle)
+  (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(xunion-val res)
 	(error "FS-STAT failed: ~A" (xunion-tag res)))))
@@ -766,14 +721,13 @@ ATTRS: initial attributes for the symlink."
    (properties :uint32 0)))
 
 ;; FSINFO3res NFSPROC3_FSINFO(FSINFO3args)           = 19;
-(defrpc %call-fs-info 19 
+(defrpc call-fs-info 19 
   nfs-fh3 
   (:union nfs-stat3
     (:ok fs-info)
-    (otherwise post-op-attr)))
-
-(defun call-fs-info (handle &key (host *nfs-host*) (port *nfs-port*) protocol)
-  (let ((res (%call-fs-info handle :host host :port port :protocol protocol)))
+    (otherwise post-op-attr))
+  (:arg-transformer (handle) handle)
+  (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(xunion-val res)
 	(error "FS-INFO failed: ~A" (xunion-tag res)))))
@@ -795,14 +749,13 @@ ATTRS: initial attributes for the symlink."
    (case-preserving :boolean)))
 
 ;; PATHCONF3res NFSPROC3_PATHCONF(PATHCONF3args)       = 20;
-(defrpc %call-path-conf 20 
+(defrpc call-path-conf 20 
   nfs-fh3
   (:union nfs-stat3
     (:ok path-conf)
-    (otherwise post-op-attr)))
-
-(defun call-path-conf (handle &key (host *nfs-host*) (port *nfs-port*) protocol)
-  (let ((res (%call-path-conf handle :host host :port port :protocol protocol)))
+    (otherwise post-op-attr))
+  (:arg-transformer (handle) handle)
+  (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(xunion-val res)
 	(error "PATH-CONF failed: ~A" (xunion-tag res)))))
@@ -817,14 +770,13 @@ ATTRS: initial attributes for the symlink."
 ;; commit -- commit cached data on a server to stable storage
 
 ;; COMMIT3res NFSPROC3_COMMIT(COMMIT3args)           = 21;
-(defrpc %call-commit 21 
+(defrpc call-commit 21 
   (:list nfs-fh3 offset3 count3)
   (:union nfs-stat3
     (:ok (:list wcc-data write-verf3))
-    (otherwise wcc-data)))
-
-(defun call-commit (handle offset count &key (host *nfs-host*) (port *nfs-port*) protocol)
-  (let ((res (%call-commit (list handle offset count) :host host :port port :protocol protocol)))
+    (otherwise wcc-data))
+  (:arg-transformer (handle offset count) (list handle offset count))
+  (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(destructuring-bind (wcc verf) (xunion-val res)
 	  (values wcc verf))

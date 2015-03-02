@@ -20,7 +20,10 @@
 (defconstant +mount-program+ 100005)
 (defconstant +mount-version+ 3)
 
+(defparameter *mount-port* 635)
+
 (use-rpc-program +mount-program+ +mount-version+)
+(use-rpc-port 635)
 
 (defconstant +mount-path-len+ 1024)
 (defconstant +mount-name-len+ 255)
@@ -42,14 +45,12 @@
    (:not-supp 10004)
    (:server-fault 10006)))
 
-(defparameter *mount-host* "localhost")
-(defparameter *mount-port* 635)
-
 (define-condition mount-error (error)
   ((stat :initarg :stat :initform nil :reader mount-error-stat))
   (:report (lambda (condition stream)
 	     (format stream "MOUNT-ERROR: ~A" (mount-error-stat condition)))))
 
+;; -------------------------------
 
 ;; list of hosts who have mounted
 (defvar *mount-clients* nil)
@@ -68,9 +69,7 @@
 
 ;; -----------------------------------------------------
 ;; for testing connections 
-(defrpc %call-null 0 :void :void)
-(defun call-null (&key (host *mount-host*) (port *mount-port*) protocol)
-  (%call-null nil :host host :port port :protocol protocol))
+(defrpc call-null 0 :void :void)
 
 (defhandler %handle-null (void 0)
   (declare (ignore void))
@@ -79,14 +78,13 @@
 ;; -----------------------------------------------------
 ;; mount 
 
-(defrpc %call-mount 1
+(defrpc call-mount 1
   dir-path
   (:union mount-stat3
     (:ok (:list fhandle3 (:varray frpc::auth-flavour)))
-    (otherwise :void)))
-
-(defun call-mount (dpath &key (host *mount-host*) (port *mount-port*) protocol)
-  (let ((res (%call-mount dpath :host host :port port :protocol protocol)))
+    (otherwise :void))
+  (:arg-transformer (dpath) dpath)
+  (:transformer (res)
     (case (xunion-tag res)
       (:ok (destructuring-bind (dhandle auth-flavours) (xunion-val res)
 	     (values dhandle auth-flavours)))
@@ -120,13 +118,12 @@
   ((mount mounting)
    (next mount-list)))
 
-(defrpc %call-dump 2 :void mount-list)
-(defun call-dump (&key (host *mount-host*) (port *mount-port*) protocol)
-  (do ((mount-list (%call-dump nil :host host :port port :protocol protocol)
-		   (mount-body-next mount-list))
-       (mlist nil))
-      ((null mount-list) mlist)
-    (push (mount-body-mount mount-list) mlist)))
+(defrpc call-dump 2 :void mount-list
+  (:transformer (res)
+    (do ((mount-list res (mount-body-next mount-list))
+	 (mlist nil))
+	((null mount-list) mlist)
+      (push (mount-body-mount mount-list) mlist))))
 
 ;;(defhandler %handle-dump (void 2)
 ;;  (declare (ignore void))
@@ -134,9 +131,8 @@
 
 ;; -----------------------------------------------------
 ;; unmount -- remove mount entry 
-(defrpc %call-unmount 3 dir-path :void)
-(defun call-unmount (dpath &key (host *mount-host*) (port *mount-port*) protocol)
-  (%call-unmount dpath :host host :port port :protocol protocol))
+(defrpc call-unmount 3 dir-path :void
+  (:arg-transformer (dpath) dpath))
 
 ;; FIXME: when we support keeping a list of mounted clients we should 
 ;; remove the client from this list 
@@ -147,9 +143,7 @@
 
 ;; -----------------------------------------------------
 ;; unmount all -- remove all mount entries
-(defrpc %call-unmount-all 4 :void :void)
-(defun call-unmount-all (&key (host *mount-host*) (port *mount-port*) protocol)
-  (%call-unmount-all nil :host host :port port :protocol protocol))
+(defrpc call-unmount-all 4 :void :void)
 
 (defhandler %handle-unmount-all (void 4)
   (declare (ignore void))
@@ -172,18 +166,18 @@
    (groups groups)
    (next exports)))
 
-(defrpc %call-export 5 :void exports)
-(defun call-export (&key (host *mount-host*) (port *mount-port*) protocol)
-  (do ((enodes (%call-export nil :host host :port port :protocol protocol) (export-node-next enodes))
-	(elist nil))
-      ((null enodes) elist)
-    (push (list (cons :dir (export-node-dir enodes))
-		(cons :groups 
-		      (do ((groups (export-node-groups enodes) (group-node-next groups))
-			   (glist nil))
-			  ((null groups) glist)
-			(push (group-node-name groups) glist))))
-	  elist)))
+(defrpc call-export 5 :void exports
+  (:transformer (res)
+    (do ((enodes res (export-node-next enodes))
+	 (elist nil))
+	((null enodes) elist)
+      (push (list (cons :dir (export-node-dir enodes))
+		  (cons :groups 
+			(do ((groups (export-node-groups enodes) (group-node-next groups))
+			     (glist nil))
+			    ((null groups) glist)
+			  (push (group-node-name groups) glist))))
+	    elist))))
 
 ;;(defhandler %handle-export (void 5)
 ;;  (declare (ignore void))
