@@ -29,6 +29,7 @@
 	  #:call-commit
 	  #:start
 	  #:stop
+	  #:with-nfs-mount
 	  #:with-nfs-file
 	  #:nfs-file-stream
 	  #:make-nfs-file-stream))

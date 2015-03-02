@@ -50,7 +50,7 @@
   (declare (fixnum start end))
   (let ((count (- end start)))
     (multiple-value-bind (bytes eof attr) 
-	   (apply #'nfs:call-read 
+	   (apply #'call-read 
 		  (nfs-file-stream-fh stream) 
 		  (nfs-file-stream-position stream)
 		  count
@@ -65,7 +65,7 @@
 	  (incf (nfs-file-stream-position stream)))))))
   
 (defmethod stream-write-sequence ((stream nfs-file-stream) sequence start end &key)
-  (apply #'nfs:call-write
+  (apply #'call-write
 	 (nfs-file-stream-fh stream)
 	 (nfs-file-stream-position stream)
 	 (subseq sequence start end)
@@ -90,7 +90,7 @@
   (nfs-file-stream-position stream))
 
 (defun make-nfs-file-stream (dhandle filename &rest call-args)
-  (let ((fh (apply #'nfs:call-lookup dhandle filename call-args)))
+  (let ((fh (apply #'call-lookup dhandle filename call-args)))
     (make-instance 'nfs-file-stream
 		   :fh fh
 		   :call-args call-args)))

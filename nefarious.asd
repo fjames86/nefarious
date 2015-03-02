@@ -14,6 +14,7 @@
    (:file "nfs" :depends-on ("package"))
    (:file "interface" :depends-on ("nfs"))
    (:file "server" :depends-on ("interface"))
-   (:file "streams" :depends-on ("server")))
+   (:file "streams" :depends-on ("server"))
+   (:file "client" :depends-on ("streams")))
   :depends-on (:frpc :cl-fad :trivial-gray-streams))
 
