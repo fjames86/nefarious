@@ -225,7 +225,7 @@ of NFS-ACCESS flag symbols."))
     (list handle offset (length data) stable data))
   (:transformer (res)
     (if (eq (xunion-tag res) :ok)
-	(xunion-val res)
+	(apply #'values (xunion-val res))
 	(error "WRITE failed: ~A" (xunion-tag res)))))
 
 (defhandler %handle-write (args 7)
@@ -546,16 +546,15 @@ ATTRS: initial attributes for the symlink."))
   (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(destructuring-bind (attr cverf dlist) (xunion-val res)
-	  (list attr cverf 
-		(make-dir-list3 
-		 :eof (dir-list3-eof dlist)
-		 :entries
-		 (do ((entries (dir-list3-entries dlist) (%entry3-next-entry entries))
-		      (elist nil))
-		     ((null entries) elist)
-		   (push (%entry3-entry entries) elist)))))
-	(error "READ-DIR failed: ~A" (xunion-tag res)))))
-		
+	  (values (do ((entries (dir-list3-entries dlist) (%entry3-next-entry entries))
+		       (elist nil))
+		      ((null entries) elist)
+		    (push (entry3-name (%entry3-entry entries)) elist))
+		  (dir-list3-eof dlist)
+		  attr
+		  cverf))
+	(error "READ-DIR failed: ~A" (xunion-tag res))))
+  (:documentation "List all the files in the directory."))
 
 (defhandler %handle-read-dir (args 16)
   (destructuring-bind (dh cookie verf count) args

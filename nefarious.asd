@@ -13,6 +13,7 @@
    (:file "package" :depends-on ("mount"))
    (:file "nfs" :depends-on ("package"))
    (:file "interface" :depends-on ("nfs"))
-   (:file "server" :depends-on ("interface")))
-  :depends-on (:frpc :cl-fad))
+   (:file "server" :depends-on ("interface"))
+   (:file "streams" :depends-on ("server")))
+  :depends-on (:frpc :cl-fad :trivial-gray-streams))
 

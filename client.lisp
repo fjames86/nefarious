@@ -2,6 +2,9 @@
 
 (in-package #:nefarious)
 
+;; use trivial-gray-streams to define a nfs-file-stream type
+
+
 (defmacro with-nfs-mount ((var path &key host port protocol) &body body)
   (alexandria:with-gensyms (gpath ghost gport gprotocol)
     `(let ((,gpath ,path)

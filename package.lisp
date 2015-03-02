@@ -3,7 +3,7 @@
 
 ;; nfs protocol
 (defpackage #:nefarious
- (:use #:cl #:frpc #:nefarious.handles)
+ (:use #:cl #:frpc #:nefarious.handles #:trivial-gray-streams)
  (:nicknames #:nfs)
  (:export #:call-null
 	  #:call-get-attr
@@ -28,5 +28,8 @@
 	  #:call-path-conf
 	  #:call-commit
 	  #:start
-	  #:stop))
+	  #:stop
+	  #:with-nfs-file
+	  #:nfs-file-stream
+	  #:make-nfs-file-stream))
 
