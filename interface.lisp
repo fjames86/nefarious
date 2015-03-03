@@ -33,7 +33,7 @@
   (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(xunion-val res)
-	(error "GETATTR failed: ~A" (xunion-tag res))))
+	(error 'nfs-error :stat (xunion-tag res))))
   (:documentation "Get file attributes"))
  
 (defhandler %handle-get-attr (fh 1)
@@ -76,7 +76,7 @@
   (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(xunion-val res)
-	(error "SETATTR failed: ~A" (xunion-tag res))))
+	(error 'nfs-error :stat (xunion-tag res))))
   (:documentation "Set attributes"))
 
 ;;(defhandler %handle-set-attr (args 2)
@@ -100,7 +100,8 @@
     (if (eq (xunion-tag res) :ok)
 	(destructuring-bind (fh attr1 attr2) (xunion-val res)
 	  (values fh attr1 attr2))
-	(error "LOOKUP failed: ~A" (xunion-tag res)))))
+	(error 'nfs-error :stat (xunion-tag res))))
+  (:documentation "Get the file handle and attributes. Returns (values file-handle attributes directory-attributes)"))
 
 (defhandler %handle-lookup (arg 3)
   (with-slots (dir name) arg
@@ -144,8 +145,12 @@
 	      (reduce (lambda (val sym)
 			(logior val (enum 'nfs-access sym)))
 		      access))))
+  (:transformer (res)
+    (if (eq (xunion-tag res) :ok)
+	(apply #'values (xunion-val res))
+	(error 'nfs-error :stat (xunion-tag res))))
   (:documentation "ACCESS can be either an integer which is a bitwise OR of NFS-ACCESS flags, or a list 
-of NFS-ACCESS flag symbols."))
+of NFS-ACCESS flag symbols. Returns (values post-op-attr access"))
 
 (defhandler %handle-access (args 4)
   (destructuring-bind (fh access) args
@@ -166,7 +171,7 @@ of NFS-ACCESS flag symbols."))
     (if (eq (xunion-tag res) :ok)
 	(destructuring-bind (attr path) (xunion-val res)
 	  (values attr path))
-	(error "READLINK failed: ~A" (xunion-tag res)))))
+	(error 'nfs-error :stat (xunion-tag res)))))
 
 (defhandler %handle-readlink (handle 5)
   (declare (ignore handle))
@@ -191,7 +196,7 @@ of NFS-ACCESS flag symbols."))
 	(destructuring-bind (attr count eof data) (xunion-val res)
 	  (declare (ignore count))
 	  (values data eof attr))
-	(error "READ failed: ~A" (xunion-tag res)))))
+	(error 'nfs-error :stat (xunion-tag res)))))
 
 (defhandler %handle-read (args 6)
   (destructuring-bind (fh offset count) args
@@ -226,7 +231,7 @@ of NFS-ACCESS flag symbols."))
   (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(apply #'values (xunion-val res))
-	(error "WRITE failed: ~A" (xunion-tag res)))))
+	(error 'nfs-error :stat (xunion-tag res)))))
 
 (defhandler %handle-write (args 7)
   (destructuring-bind (fh offset count stable data) args
@@ -288,7 +293,8 @@ of NFS-ACCESS flag symbols."))
     (if (eq (xunion-tag res) :ok)
 	(destructuring-bind (fh attr wcc) (xunion-val res)
 	  (values fh attr wcc))
-	(error "CREATE failed: ~A" (xunion-tag res)))))
+	(error 'nfs-error :stat (xunion-tag res))))
+  (:documentation "Create a new file named NAME in directory named by DHANDLE. Returns (values fh attr wcc)."))
 
 (defhandler %handle-create (args 8)
   (destructuring-bind (dirop how) args
@@ -311,14 +317,15 @@ of NFS-ACCESS flag symbols."))
   (:union nfs-stat3
     (:ok (:list post-op-fh3 post-op-attr wcc-data))
     (otherwise wcc-data))
-  (:arg-transformer (dhandle filename &key sattr)
-    (list (make-dir-op-args3 :dir dhandle :name filename)
+  (:arg-transformer (dhandle name &key sattr)
+    (list (make-dir-op-args3 :dir dhandle :name name)
 	  (or sattr (make-sattr3))))
   (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(destructuring-bind (fh attr wcc) (xunion-val res)
 	  (values fh attr wcc))
-	(error "MKDIR failed: ~A" (xunion-tag res)))))
+	(error 'nfs-error :stat (xunion-tag res))))
+  (:documentation "Create a new directory named NAME in directory named by DHANDLE. Returns (values fh attr wcc)."))
 
 (defhandler %handle-mkdir (args 9)
   (destructuring-bind (dir-op attrs) args
@@ -357,17 +364,9 @@ of NFS-ACCESS flag symbols."))
     (if (eq (xunion-tag res) :ok)
 	(destructuring-bind (fh attr wcc) (xunion-val res)
 	  (values fh attr wcc))
-	(error "CREATE-SYMLINK failed: ~A" (xunion-tag res))))
-  (:documentation 
-  "Create a symblink.
-
-DHANDLE: directory handle to create symlink in. 
-
-FILENAME: name to be associated with the link.
-
-PATH: the symbolic link data.
-
-ATTRS: initial attributes for the symlink."))
+	(error 'nfs-error :stat (xunion-tag res))))
+  (:documentation "Create a symbolic link to a file. DHANDLE and FILENAME name the symlink to create. PATH should contain 
+the data to put into the symlink. ATTRS are the initial attributes of the newly created symlink. Returns (values handle attr wcc)."))
 
 
 ;;(defhandler %handle-create-symlink (args 10)
@@ -398,7 +397,7 @@ ATTRS: initial attributes for the symlink."))
     (if (eq (xunion-tag res) :ok)
 	(destructuring-bind (fh attr wcc) (xunion-val res)
 	  (values fh attr wcc))
-	(error "MKNOD failed: ~A" (xunion-tag res))))
+	(error 'nfs-error :stat (xunion-tag res))))
   (:documentation "Create special device."))
 
 ;; dont support this
@@ -422,7 +421,7 @@ ATTRS: initial attributes for the symlink."))
   (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(xunion-val res)
-	(error "REMOVE failed: ~A" (xunion-tag res))))
+	(error 'nfs-error :stat (xunion-tag res))))
   (:documentation "Remove a file."))
 	
 (defhandler %handle-remove (args 12)
@@ -449,7 +448,8 @@ ATTRS: initial attributes for the symlink."))
   (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(xunion-val res)
-	(error "RMDIR failed: ~A" (xunion-tag res)))))
+	(error 'nfs-error :stat (xunion-tag res))))
+  (:documentation "Deletes a directory."))
 
 (defhandler %handle-rmdir (args 13)
   (with-slots (dir name) args
@@ -478,7 +478,8 @@ ATTRS: initial attributes for the symlink."))
     (if (eq (xunion-tag res) :ok)
 	(destructuring-bind (wcc1 wcc2) (xunion-val res)
 	  (values wcc1 wcc2))
-	(error "RENAME failed: ~A" (xunion-tag res)))))
+	(error 'nfs-error :stat (xunion-tag res))))
+  (:documentation "Rename a file."))
 
 (defhandler %handle-rename (args 14)
   (destructuring-bind (from to) args
@@ -512,7 +513,8 @@ ATTRS: initial attributes for the symlink."))
     (if (eq (xunion-tag res) :ok)
 	(destructuring-bind (attr wcc) (xunion-val res)
 	  (values attr wcc))
-	(error "LINK failed: ~A" (xunion-tag res)))))
+	(error 'nfs-error :stat (xunion-tag res))))
+  (:documentation "Create a link to a file. Returns (values attrs wcc)."))
 	
 ;;(defhandler %handle-link (args 15)
 ;;  (destructuring-bind (handle dirop) args
@@ -553,8 +555,8 @@ ATTRS: initial attributes for the symlink."))
 		  (dir-list3-eof dlist)
 		  attr
 		  cverf))
-	(error "READ-DIR failed: ~A" (xunion-tag res))))
-  (:documentation "List all the files in the directory."))
+	(error 'nfs-error :stat (xunion-tag res))))
+  (:documentation "List all the files in the directory. Returns (values file-name* attributes cookie-verf)."))
 
 (defhandler %handle-read-dir (args 16)
   (destructuring-bind (dh cookie verf count) args
@@ -633,7 +635,7 @@ ATTRS: initial attributes for the symlink."))
 		      (elist nil))
 		     ((null entries) elist)
 		   (push (%entry3-plus-entry entries) elist)))))
-	(error "READ-DIR-PLUS failed: ~A" (xunion-tag res)))))
+	(error 'nfs-error :stat (xunion-tag res)))))
 
 (defhandler %handle-read-dir-plus (args 17)
   (destructuring-bind (dh cookie verf count max) args
@@ -691,7 +693,8 @@ ATTRS: initial attributes for the symlink."))
   (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(xunion-val res)
-	(error "FS-STAT failed: ~A" (xunion-tag res)))))
+	(error 'nfs-error :stat (xunion-tag res))))
+  (:documentation "Retreive dynamic file system information. Returns an FS-STAT structure."))
 
 (defhandler %handle-fs-stat (handle 18)
   (declare (ignore handle))
@@ -729,7 +732,8 @@ ATTRS: initial attributes for the symlink."))
   (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(xunion-val res)
-	(error "FS-INFO failed: ~A" (xunion-tag res)))))
+	(error 'nfs-error :stat (xunion-tag res))))
+  (:documentation "Retreive static file system information. Returns an FS-INFO structure."))
 
 (defhandler %handle-fs-info (handle 19)
   (declare (ignore handle))
@@ -757,7 +761,8 @@ ATTRS: initial attributes for the symlink."))
   (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(xunion-val res)
-	(error "PATH-CONF failed: ~A" (xunion-tag res)))))
+	(error 'nfs-error :stat (xunion-tag res))))
+  (:documentation "Retreive POSIX information. Returns a PATH-CONF object."))
 
 (defhandler %handle-path-conf (handle 20)
   (declare (ignore handle))
@@ -779,7 +784,8 @@ ATTRS: initial attributes for the symlink."))
     (if (eq (xunion-tag res) :ok)
 	(destructuring-bind (wcc verf) (xunion-val res)
 	  (values wcc verf))
-	(error "COMMIT failed: ~A" (xunion-tag res)))))
+	(error 'nfs-error :stat (xunion-tag res))))
+  (:documentation "Commit cached data on a server to stable storage. Returns (values wcc-data verf)."))
 
 
 ;; dont support this
