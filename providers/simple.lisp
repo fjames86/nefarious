@@ -155,9 +155,10 @@ be a string naming the mount-point that is exported by NFS."
     (delete-file (handle-pathname handle))))
 
 (defun file-size (handle)
-  (with-open-file (f (handle-pathname handle) :direction :input 
-		     :element-type '(unsigned-byte 8))
-    (file-length f)))
+  (unless (handle-directory-p handle)
+    (with-open-file (f (handle-pathname handle) :direction :input 
+		       :element-type '(unsigned-byte 8))
+      (file-length f))))
 
 (defun create-directory (provider dhandle name)
   (let ((handle (allocate-dhandle provider dhandle name)))
@@ -196,8 +197,8 @@ be a string naming the mount-point that is exported by NFS."
 		       :mode 0
 		       :uid 0
 		       :gid 0
-		       :size size
-		       :used size
+		       :size (or size 0)
+		       :used (or size 0)
 		       :fileid 0
 		       :atime (make-nfs-time3)
 		       :mtime (make-nfs-time3)
@@ -262,7 +263,8 @@ be a string naming the mount-point that is exported by NFS."
 (defmethod nfs-provider-read-dir ((provider simple-provider) dh)
   "Returns a list of all object (file and directory) names in the directory."
   (let ((dhandle (find-handle provider dh)))
-    (unless dhandle (error 'nfs-stat :bad-handle))
+    (unless dhandle (error 'nfs-error :stat :bad-handle))
+    (unless (handle-directory-p dhandle) (error 'nfs-error :stat :notdir))
 
     (let ((files (cl-fad:list-directory (handle-pathname dhandle))))
       (mapcar (lambda (path)
