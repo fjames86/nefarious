@@ -3,13 +3,13 @@
 
 (in-package #:nefarious)
 
-;; the server 
+
+;; -------------------
+;; the rpc server 
 (defvar *server* nil)
 
-(defun start (export-path &optional path)
+(defun start ()
   "Start the NFS server."
-  (export-directory (or path (merge-pathnames (make-pathname)))
-		    export-path)
   (setf *server* (make-rpc-server))
   (let ((tcp-ports (list pmap:*pmap-port* *nfs-port* nfs.mount:*mount-port*))
 	(udp-ports (list pmap:*pmap-port* *nfs-port* nfs.mount:*mount-port*)))

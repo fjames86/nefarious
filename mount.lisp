@@ -4,7 +4,7 @@
 ;;; The mount protocol
 
 (defpackage #:nefarious.mount
-  (:use #:cl #:frpc #:nefarious.handles)
+  (:use #:cl #:frpc #:nefarious)
   (:nicknames #:nfs.mount)
   (:export #:call-null
 	   #:call-mount
@@ -12,8 +12,7 @@
 	   #:call-unmount
 	   #:call-unmount-all
 	   #:call-export
-	   #:*mount-port*
-	   #:mountedp))
+	   #:*mount-port*))
 
 (in-package #:nefarious.mount)
 
@@ -50,23 +49,6 @@
   (:report (lambda (condition stream)
 	     (format stream "MOUNT-ERROR: ~A" (mount-error-stat condition)))))
 
-;; -------------------------------
-
-;; list of hosts who have mounted
-(defvar *mount-clients* nil)
-
-(defun add-mount-client (address)
-  (pushnew address *mount-clients*
-	   :test #'equalp))
-
-(defun rem-mount-client (address)
-  (setf *mount-clients*
-	(remove address *mount-clients*
-		:test #'equalp)))
-
-(defun mountedp (address)
-  (find address *mount-clients* :test #'equalp))
-
 ;; -----------------------------------------------------
 ;; for testing connections 
 (defrpc call-null 0 :void :void)
@@ -90,19 +72,17 @@
 	     (values dhandle auth-flavours)))
       (otherwise (error 'mount-error :stat (xunion-tag res))))))
 
-;; FIXME: we need to keep a list of the clients who have mounted. any NFS calls from 
-;; non-mounted clients should be rejected
 (defhandler %handle-mount (dpath 1)
   "Find the exported directory with the export name DPATH and return its handle and authentication flavours."
-  (let ((dhandle (find-export dpath)))
-    (cond
-      (dhandle
-       (log:debug "Host ~A successfully mounted ~A" 
-		  frpc:*rpc-remote-host* (handle-pathname dhandle))
-       (add-mount-client frpc:*rpc-remote-host*)
-       (make-xunion :ok 
-		    (list (handle-fh dhandle) '(:auth-null))))
+  (let ((provider (find-provider dpath)))
+    (cond 
+      (provider
+       (let ((dhandle (nfs-provider-mount provider *rpc-remote-host*)))
+	 (make-xunion :ok
+		      (list (provider-handle-fh provider dhandle)
+			    '(:auth-null)))))
       (t 
+       ;; no provider registered on that path
        (make-xunion :inval nil)))))
 
 ;; -----------------------------------------------------
@@ -137,19 +117,21 @@
 ;; FIXME: when we support keeping a list of mounted clients we should 
 ;; remove the client from this list 
 (defhandler %handle-unmount (dpath 3)
-  (log:debug "Host ~A unmounted ~A" frpc:*rpc-remote-host* dpath)
-  (rem-mount-client frpc:*rpc-remote-host*)
-  nil)
+  (let ((provider (find-provider dpath)))
+    (cond
+      (provider
+       (nfs-provider-unmount provider *rpc-remote-host*)
+       nil)
+      (t 
+       nil))))
 
 ;; -----------------------------------------------------
 ;; unmount all -- remove all mount entries
 (defrpc call-unmount-all 4 :void :void)
 
-(defhandler %handle-unmount-all (void 4)
-  (declare (ignore void))
-  (log:debug "Host ~A unmounted all" frpc:*rpc-remote-host*)
-  (rem-mount-client frpc:*rpc-remote-host*)
-  nil)
+;;(defhandler %handle-unmount-all (void 4)
+;;  (declare (ignore void))
+;;  nil)
 
 ;; -----------------------------------------------------
 ;; export -- return export list 

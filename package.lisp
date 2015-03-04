@@ -3,7 +3,7 @@
 
 ;; nfs protocol
 (defpackage #:nefarious
- (:use #:cl #:frpc #:nefarious.handles #:trivial-gray-streams)
+ (:use #:cl #:frpc #:trivial-gray-streams)
  (:nicknames #:nfs)
  (:export #:call-null
 	  #:call-get-attr
@@ -27,10 +27,58 @@
 	  #:call-fs-info
 	  #:call-path-conf
 	  #:call-commit
+
+	  ;; structures
+	  #:fattr3
+	  #:make-fattr3
+	  #:nfs-time3
+	  #:make-nfs-time3
+	  #:fs-info
+	  #:make-fs-info
+	  #:fs-stat
+	  #:make-fs-stat
+	  #:path-conf
+	  #:make-path-conf
+
+	  ;; errors
+	  #:nfs-error
+
+	  ;; server
 	  #:start
 	  #:stop
+
+	  ;; client
 	  #:with-nfs-mount
 	  #:with-nfs-file
+
+	  ;; client streams
 	  #:nfs-file-stream
-	  #:make-nfs-file-stream))
+	  #:make-nfs-file-stream
+
+
+	  ;; providers
+	  #:nfs-provider
+	  #:register-provider
+	  #:unregister-provider
+	  #:find-provider
+	  #:provider-handle-fh
+	  #:fh-provider-handle
+	  ;; provider generic functions
+	  #:nfs-provider-mount
+	  #:nfs-provider-unmount
+	  #:nfs-provider-attrs
+	  #:nfs-provider-lookup
+	  #:nfs-provider-access
+	  #:nfs-provider-read
+	  #:nfs-provider-write
+	  #:nfs-provider-create
+	  #:nfs-provider-remove
+	  #:nfs-provider-rename
+	  #:nfs-provider-read-dir
+	  #:nfs-provider-create-dir
+	  #:nfs-provider-remove-dir
+	  #:nfs-provider-fs-info
+	  #:nfs-provider-fs-stat
+	  #:nfs-provider-path-conf
+	  ))
 

@@ -23,7 +23,7 @@
    (buffer :initform (make-array +default-stream-buffer-size+ :element-type '(unsigned-byte))
 	   :initarg :buffer :reader nfs-file-stream-buffer)   
    (buffer-pos :initform 0 :accessor nfs-file-stream-buffer-pos)   
-   (attrs :initarg :attrs :reader nfs-file-stream-attrs)
+   (attrs :initarg :attrs :accessor nfs-file-stream-attrs)
    (call-args :initform nil :initarg :call-args :reader nfs-file-stream-call-args)))
 
 #+:cmu
@@ -149,6 +149,14 @@
 		   :attrs file-attrs
 		   :buffer-size buffer-size
 		   :buffer (make-array buffer-size :element-type '(unsigned-byte 8)))))
+
+(defmacro with-nfs-mount ((var path &rest call-args) &body body)
+  (alexandria:with-gensyms (gpath gargs)
+    `(let ((,gpath ,path)
+	   (,gargs (list ,@call-args)))
+       (let ((,var (apply #'nefarious.mount:call-mount ,gpath ,gargs)))
+	 (unwind-protect (progn ,@body)
+	   (apply #'nefarious.mount:call-unmount ,gpath ,gargs))))))
 
 (defmacro with-nfs-file ((var dhandle filename &rest call-args) &body body)
   `(let ((,var (make-nfs-file-stream ,dhandle ,filename ,@call-args)))

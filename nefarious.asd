@@ -8,13 +8,14 @@
   :description "An NFS implementation in Common Lisp"
   :license "MIT"
   :components
-  ((:file "handles")
-   (:file "mount" :depends-on ("handles"))
-   (:file "package" :depends-on ("mount"))
+  ((:file "package")
+   (:file "providers" :depends-on ("package"))
    (:file "nfs" :depends-on ("package"))
-   (:file "interface" :depends-on ("nfs"))
+   (:file "errors" :depends-on ("nfs"))
+   (:file "mount" :depends-on ("providers"))
+   (:file "interface" :depends-on ("errors"))
    (:file "server" :depends-on ("interface"))
-   (:file "streams" :depends-on ("server"))
-   (:file "client" :depends-on ("streams")))
+   (:file "streams" :depends-on ("server")))
   :depends-on (:frpc :cl-fad :trivial-gray-streams))
+
 

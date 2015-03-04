@@ -37,25 +37,10 @@
   (:documentation "Get file attributes"))
  
 (defhandler %handle-get-attr (fh 1)
-  (let ((handle (find-handle fh)))
-    (if handle
-	(make-xunion :ok
-		     (let ((size (file-size handle)))
-		     (make-fattr3 :type (if (handle-directory-p handle)
-					    :dir
-					    :reg)
-				  :mode 0
-				  :uid 0
-				  :gid 0
-				  :size size
-				  :used size
-				  :rdev (make-specdata3)
-				  :fileid 0
-				  :atime (make-nfs-time3)
-				  :mtime (make-nfs-time3)
-				  :ctime (make-nfs-time3))))
+  (destructuring-bind (provider handle) (fh-provider-handle fh)
+    (if provider
+	(make-xunion :ok (nfs-provider-attrs provider handle))
 	(make-xunion :bad-handle nil))))
-
 
 ;; ------------------------------------------------------
 ;; SETATTR3res NFSPROC3_SETATTR(SETATTR3args)         = 2;
@@ -105,15 +90,21 @@
 
 (defhandler %handle-lookup (arg 3)
   (with-slots (dir name) arg
-    (let ((dhandle (find-handle dir)))
-      (if dhandle
-	  (let ((handle (allocate-handle dhandle name)))
-	    (if handle
-		(make-xunion :ok
-			     (list (handle-fh handle)
-				   nil
-				   nil))
-		(make-xunion :noent nil)))
+    (destructuring-bind (provider dh) (fh-provider-handle dir)
+      (if provider 
+	  (handler-case 
+	      (let ((handle (nfs-provider-lookup provider dh name)))
+		(if handle 
+		    (make-xunion :ok (list (provider-handle-fh provider handle)
+					   nil 
+					   nil))
+		    (make-xunion :noent nil)))
+	    (nfs-error (e)
+	      (log:debug "~A" e)
+	      (make-xunion (nfs-error-stat e) nil))
+	    (error (e)
+	      (log:debug "~A" e)
+	      (make-xunion :server-fault nil)))
 	  (make-xunion :bad-handle nil)))))
 
 ;; ------------------------------------------------------
@@ -129,6 +120,18 @@
   (:delete #x0010)
   (:execute #x0020)))
 
+(defun pack-nfs-access (access)
+  (declare (type list access))
+  (reduce (lambda (val sym)
+	    (logior val (enum 'nfs-access sym)))
+	  access))
+(defun unpack-nfs-access (access)
+  (declare (type fixnum access))
+  (mapcan (lambda (sym)
+	    (when (logand access (enum 'nfs-access sym))
+	      (list sym)))
+	  '(:read :lookup :modify :extend :delete :execute)))
+
 ;;(defxstruct access-args ()
 ;;  ((object nfs-fh3)
 ;;   (access :uint32)))
@@ -142,20 +145,23 @@
     (list handle
 	  (if (integerp access)
 	      access
-	      (reduce (lambda (val sym)
-			(logior val (enum 'nfs-access sym)))
-		      access))))
+	      (pack-nfs-access access))))
   (:transformer (res)
     (if (eq (xunion-tag res) :ok)
-	(apply #'values (xunion-val res))
+	(destructuring-bind (attr access) (xunion-val res)
+	  (values (unpack-nfs-access access) attr))
 	(error 'nfs-error :stat (xunion-tag res))))
   (:documentation "ACCESS can be either an integer which is a bitwise OR of NFS-ACCESS flags, or a list 
 of NFS-ACCESS flag symbols. Returns (values post-op-attr access"))
 
 (defhandler %handle-access (args 4)
   (destructuring-bind (fh access) args
-    (declare (ignore fh))
-    (make-xunion :ok (list nil access))))
+    (destructuring-bind (provider handle) (fh-provider-handle fh)
+      (if provider
+	  (make-xunion :ok
+		       (list nil 
+			     (pack-nfs-access (nfs-provider-access provider handle access))))
+	  (make-xunion :bad-handle nil)))))
 
 ;; ------------------------------------------------------
 ;; readlink -- read from symbolic link
@@ -173,9 +179,9 @@ of NFS-ACCESS flag symbols. Returns (values post-op-attr access"))
 	  (values attr path))
 	(error 'nfs-error :stat (xunion-tag res)))))
 
-(defhandler %handle-readlink (handle 5)
-  (declare (ignore handle))
-  (make-xunion :ok (list nil "")))
+;;(defhandler %handle-readlink (handle 5)
+;;  (declare (ignore handle))
+;;  (make-xunion :ok (list nil "")))
 
 ;; ------------------------------------------------------
 ;; read -- read from file
@@ -200,16 +206,23 @@ of NFS-ACCESS flag symbols. Returns (values post-op-attr access"))
 
 (defhandler %handle-read (args 6)
   (destructuring-bind (fh offset count) args
-    (let ((handle (find-handle fh)))
-      (if handle
-	  (let ((buffer (read-file handle offset count)))
-	    (make-xunion :ok
-			 (list nil
-			       (length buffer)
-			       (if (< (length buffer) count)
-				   t
-				   nil)
-			       buffer)))
+    (destructuring-bind (provider handle) (fh-provider-handle fh)
+      (if provider
+	  (handler-case 
+	      (let ((bytes (nfs-provider-read provider handle offset count)))
+		(make-xunion :ok
+			     (list nil
+				   (length bytes)
+				   (if (< (length bytes) count)
+				       t
+				       nil)
+				   bytes)))
+	    (nfs-error (e)
+	      (log:debug "~A" e)
+	      (make-xunion (nfs-error-stat e) nil))
+	    (error (e)
+	      (log:debug "~A" e)
+	      (make-xunion :server-fault nil)))
 	  (make-xunion :bad-handle nil)))))
 
 ;; ------------------------------------------------------
@@ -235,19 +248,23 @@ of NFS-ACCESS flag symbols. Returns (values post-op-attr access"))
 
 (defhandler %handle-write (args 7)
   (destructuring-bind (fh offset count stable data) args
-    (declare (ignore stable))
-    (declare (ignore count))
-    (let ((handle (find-handle fh)))
-      (if handle
-	  (let ((length (write-file handle offset data)))
-	    (make-xunion :ok
-			 (list (make-wcc-data)
-			       length
-			       :file-sync
-			       nil)))
+    (declare (ignore stable count))
+    (destructuring-bind (provider handle) (fh-provider-handle fh)
+      (if provider 
+	  (handler-case 
+	      (let ((n (nfs-provider-write provider handle offset data)))
+		(make-xunion :ok 
+			     (list (make-wcc-data)
+				   n
+				   :file-sync
+				   nil)))
+	    (nfs-error (e)
+	      (log:debug "~A" e)
+	      (make-xunion (nfs-error-stat e) nil))
+	    (error (e)
+	      (log:debug "~A" e)
+	      (make-xunion :server-fault nil)))
 	  (make-xunion :bad-handle nil)))))
-	    
-
 
 ;; ------------------------------------------------------
 ;; create -- create a file
@@ -300,13 +317,21 @@ of NFS-ACCESS flag symbols. Returns (values post-op-attr access"))
   (destructuring-bind (dirop how) args
     (declare (ignore how))
     (with-slots (dir name) dirop
-      (let ((handle (create-file dir name)))
-	(if handle
-	    (make-xunion :ok
-			 (list (handle-fh handle)
-			       nil
-			       (make-wcc-data)))
-	    (make-xunion :noent (make-wcc-data)))))))
+      (destructuring-bind (provider dh) (fh-provider-handle dir)
+	(if provider
+	    (handler-case 
+		(let ((handle (nfs-provider-create provider dh name)))
+		  (make-xunion :ok 
+			       (list (provider-handle-fh provider handle)
+				     nil
+				     (make-wcc-data))))
+	      (simple-error (e)
+		(log:debug "~A" e)
+		(make-xunion (nfs-error-stat e) (make-wcc-data)))
+	      (error (e)
+		(log:debug "~A" e)
+		(make-xunion :server-fault (make-wcc-data))))
+	    (make-xunion :bad-handle (make-wcc-data)))))))
 
 ;; ------------------------------------------------------
 ;; mkdir -- create a directory 
@@ -331,15 +356,20 @@ of NFS-ACCESS flag symbols. Returns (values post-op-attr access"))
   (destructuring-bind (dir-op attrs) args
     (declare (ignore attrs))
     (with-slots (dir name) dir-op
-      (let ((dhandle (find-handle dir)))
-	(if dhandle 
-	    (let ((handle (create-directory dhandle name)))
-	      (if handle
-		  (make-xunion :ok
-			       (list (handle-fh handle)
+      (destructuring-bind (provider dh) (fh-provider-handle dir)
+	(if provider
+	    (handler-case 
+		(let ((handle (nfs-provider-create-dir provider dh name)))
+		  (make-xunion :ok 
+			       (list (provider-handle-fh provider handle)
 				     nil
-				     (make-wcc-data)))
-		  (make-xunion :server-fault (make-wcc-data))))
+				     (make-wcc-data))))
+	      (nfs-error (e)
+		(log:debug "~A" e)
+		(make-xunion (nfs-error-stat e) (make-wcc-data)))
+	      (error (e)
+		(log:debug "~A" e)
+		(make-xunion :server-fault (make-wcc-data))))
 	    (make-xunion :bad-handle (make-wcc-data)))))))
 
 ;; ------------------------------------------------------
@@ -426,11 +456,18 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
 	
 (defhandler %handle-remove (args 12)
   (with-slots (dir name) args
-    (let ((dhandle (find-handle dir)))
-      (if dhandle
-	  (progn
-	    (remove-file dhandle name)
-	    (make-xunion :ok (make-wcc-data)))
+    (destructuring-bind (provider dh) (fh-provider-handle dir)
+      (if provider 
+	  (handler-case 
+	      (progn 
+		(nfs-provider-remove provider dh name)
+		(make-xunion :ok (make-wcc-data)))
+	    (nfs-error (e)
+	      (log:debug "~A" e)
+	      (make-xunion (nfs-error-stat e) (make-wcc-data)))
+	    (error (e)
+	      (log:debug "~A" e)
+	      (make-xunion :server-fault (make-wcc-data))))
 	  (make-xunion :bad-handle (make-wcc-data))))))
 	       
 ;; ------------------------------------------------------
@@ -453,11 +490,18 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
 
 (defhandler %handle-rmdir (args 13)
   (with-slots (dir name) args
-    (let ((dhandle (find-handle dir)))
-      (if dhandle
-	  (progn
-	    (remove-directory dhandle name)
-	    (make-xunion :ok (make-wcc-data)))
+    (destructuring-bind (provider dh) (fh-provider-handle dir)
+      (if provider 
+	  (handler-case 
+	      (progn
+		(nfs-provider-remove-dir provider dh name)
+		(make-xunion :ok (make-wcc-data)))
+	    (nfs-error (e)
+	      (log:debug "~A" e)
+	      (make-xunion (nfs-error-stat e) (make-wcc-data)))
+	    (error (e)
+	      (log:debug "~A" e)
+	      (make-xunion :server-fault (make-wcc-data))))
 	  (make-xunion :bad-handle (make-wcc-data))))))
 	       
 ;; ------------------------------------------------------
@@ -487,15 +531,24 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
 	  (fname (dir-op-args3-name from))
 	  (tdh (dir-op-args3-dir to))
 	  (tname (dir-op-args3-name to)))
-      (let ((fdhandle (find-handle fdh))
-	    (tdhandle (find-handle tdh)))
-	(if (and fdhandle tdhandle)
-	    (let ((fpath (handle-pathname (make-handle fdhandle fname)))
-		  (tpath (handle-pathname (make-handle tdhandle tname))))
-	      (rename-file fpath tpath)
-	      (make-xunion :ok (list (make-wcc-data) (make-wcc-data))))
-	    (make-xunion :bad-handle
-			 (list (make-wcc-data) (make-wcc-data))))))))
+      (destructuring-bind (fprovider fhandle) (fh-provider-handle fdh)
+	(destructuring-bind (tprovider thandle) (fh-provider-handle tdh)
+	  (cond
+	    ((and fprovider tprovider (eq fprovider tprovider))
+	     (handler-case 
+		 (progn
+		   (nfs-provider-rename fprovider fhandle fname thandle tname)
+		   (make-xunion :ok (list (make-wcc-data) (make-wcc-data))))
+	       (nfs-error (e)
+		 (log:debug "~A" e)
+		 (make-xunion (nfs-error-stat e) 
+			      (list (make-wcc-data) (make-wcc-data))))
+	       (error (e)
+		 (log:debug "~A" e)
+		 (make-xunion :server-fault 
+			      (list (make-wcc-data) (make-wcc-data))))))
+	    (t 
+	     (make-xunion :bad-handle (list (make-wcc-data) (make-wcc-data))))))))))
 
 
 ;; ------------------------------------------------------
@@ -561,34 +614,27 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
 (defhandler %handle-read-dir (args 16)
   (destructuring-bind (dh cookie verf count) args
     (declare (ignore cookie verf count))
-    (let ((dhandle (find-handle dh)))
-      (if dhandle 
-	  (let ((files (cl-fad:list-directory (handle-pathname dhandle)))
-		(dlist3 (make-dir-list3 :eof t)))
-	    (do ((%files files (cdr %files))
-		 (fileid 0 (1+ fileid)))
-		((null %files))
-	      (let ((path (car %files)))
-		(setf (dir-list3-entries dlist3)
-		      (make-%entry3 :entry (make-entry3 :fileid fileid
-							:name (if (cl-fad:directory-pathname-p path)
-								  (car (last (pathname-directory path)))
-								  (format nil "~A~A~A" 
-								      (pathname-name path)
-								      (if (pathname-type path)
-									  "."
-									  "")
-								      (if (pathname-type path)
-									  (pathname-type path)
-									  ""))))
-				    :next-entry (dir-list3-entries dlist3)))))
-	    (make-xunion :ok 
-			 (list nil (make-cookie-verf3) dlist3)))
-	    ;; remove this
-;;	    (do ((entries (dir-list3-entries dlist3) (%entry3-next-entry entries))
-;;		 (elist nil))
-;;		((null entries) elist)
-;;	      (push (%entry3-entry entries) elist)))
+    (destructuring-bind (provider dhandle) (fh-provider-handle dh)
+      (if provider 
+	  (handler-case 
+	      (let ((files (nfs-provider-read-dir provider dhandle))
+		    (dlist3 (make-dir-list3 :eof t)))
+		(do ((%files files (cdr %files))
+		     (fileid 0 (1+ fileid)))
+		    ((null %files))
+		  (let ((name (car %files)))
+		    (setf (dir-list3-entries dlist3)
+			  (make-%entry3 :entry (make-entry3 :fileid fileid
+							    :name name)
+					:next-entry (dir-list3-entries dlist3)))))
+		(make-xunion :ok 
+			     (list nil (make-cookie-verf3) dlist3)))
+	    (nfs-error (e)
+	      (log:debug "~A" e)
+	      (make-xunion (nfs-error-stat e) nil))
+	    (error (e)
+	      (log:debug "~A" e)
+	      (make-xunion :server-fault nil)))
 	  (make-xunion :bad-handle nil)))))
 
 ;; ------------------------------------------------------
@@ -640,34 +686,31 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
 (defhandler %handle-read-dir-plus (args 17)
   (destructuring-bind (dh cookie verf count max) args
     (declare (ignore cookie verf count max))
-    (let ((dhandle (find-handle dh)))
-      (if dhandle 
-	  (let ((files (cl-fad:list-directory (handle-pathname dhandle)))
-		(dlist3 (make-dir-list3-plus :eof t)))
-	    (do ((%files files (cdr %files))
-		 (fileid 0 (1+ fileid)))
-		((null %files))
-	      (let* ((path (car %files))
-		     (handle (allocate-handle dhandle (or (pathname-name path)
-							  (car (last (pathname-directory path)))))))
-		(when handle 
-		  (setf (dir-list3-plus-entries dlist3)
-			(make-%entry3-plus :entry 
-					   (make-entry3-plus :fileid fileid
-							     :name (if (cl-fad:directory-pathname-p path)
-								       (car (last (pathname-directory path)))
-								       (format nil "~A~A~A" 
-									       (pathname-name path)
-									       (if (pathname-type path)
-										   "."
-										   "")
-									       (if (pathname-type path)
-										   (pathname-type path)
-										   "")))
-							     :handle (handle-fh handle))
-					   :next-entry (dir-list3-plus-entries dlist3))))))
-	    (make-xunion :ok 
-			 (list nil (make-cookie-verf3) dlist3)))
+    (destructuring-bind (provider dhandle) (fh-provider-handle dh)
+      (if provider 
+	  (handler-case 
+	      (let ((files (nfs-provider-read-dir provider dhandle))
+		    (dlist3 (make-dir-list3-plus :eof t)))
+		(do ((%files files (cdr %files))
+		     (fileid 0 (1+ fileid)))
+		    ((null %files))
+		  (let* ((name (car %files))
+			 (handle (nfs-provider-lookup provider dhandle name)))
+		    (when handle 
+		      (setf (dir-list3-plus-entries dlist3)
+			    (make-%entry3-plus :entry 
+					       (make-entry3-plus :fileid fileid
+								 :name name
+								 :handle (provider-handle-fh provider handle))
+					       :next-entry (dir-list3-plus-entries dlist3))))))
+		(make-xunion :ok 
+			     (list nil (make-cookie-verf3) dlist3)))
+	    (nfs-error (e)
+	      (log:debug "~A" e)
+	      (make-xunion (nfs-error-stat e) nil))
+	    (error (e)
+	      (log:debug "~A" e)
+	      (make-xunion :server-fault nil)))
 	  (make-xunion :bad-handle nil)))))
 
 ;; ------------------------------------------------------
@@ -696,9 +739,12 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
 	(error 'nfs-error :stat (xunion-tag res))))
   (:documentation "Retreive dynamic file system information. Returns an FS-STAT structure."))
 
-(defhandler %handle-fs-stat (handle 18)
-  (declare (ignore handle))
-  (make-xunion :ok (make-fs-stat)))
+(defhandler %handle-fs-stat (fh 18)
+  (destructuring-bind (provider handle) (fh-provider-handle fh)
+    (declare (ignore handle))
+    (if provider 
+	(make-xunion :ok (nfs-provider-fs-stat provider))
+	(make-xunion :bad-handle nil))))
 
 ;; ------------------------------------------------------
 ;; fs info -- get static file system info
@@ -715,8 +761,8 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
    (rtpref :uint32)
    (rtmult :uint32)
    (wtmax :uint32)
-   (wrpref :uint32)
-   (wtmulf :uint32)
+   (wtpref :uint32)
+   (wtmult :uint32)
    (dtpref :uint32)
    (max-fsize size3 0)
    (time-delta nfs-time3 (make-nfs-time3))
@@ -735,9 +781,12 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
 	(error 'nfs-error :stat (xunion-tag res))))
   (:documentation "Retreive static file system information. Returns an FS-INFO structure."))
 
-(defhandler %handle-fs-info (handle 19)
-  (declare (ignore handle))
-  (make-xunion :ok (make-fs-info)))
+(defhandler %handle-fs-info (fh 19)
+  (destructuring-bind (provider handle) (fh-provider-handle fh)
+    (declare (ignore handle))
+    (if provider 
+	(make-xunion :ok (nfs-provider-fs-info provider))
+	(make-xunion :bad-handle nil))))
 
 ;; ------------------------------------------------------
 ;; pstconf -- retrieve posix information
@@ -764,11 +813,12 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
 	(error 'nfs-error :stat (xunion-tag res))))
   (:documentation "Retreive POSIX information. Returns a PATH-CONF object."))
 
-(defhandler %handle-path-conf (handle 20)
-  (declare (ignore handle))
-  (make-xunion :ok (make-path-conf :name-max 255
-				   :link-max 255)))
-
+(defhandler %handle-path-conf (fh 20)
+  (destructuring-bind (provider handle) (fh-provider-handle fh)
+    (declare (ignore handle))
+    (if provider 
+	(make-xunion :ok (nfs-provider-path-conf provider))
+	(make-xunion :bad-handle nil))))
 
 ;; ------------------------------------------------------
 ;; commit -- commit cached data on a server to stable storage
