@@ -9,4 +9,5 @@
   (:report (lambda (condition stream)
 	     (apply #'format stream 
 		    (nfs-error-format-control condition)
+		    (nfs-error-stat condition)
 		    (nfs-error-format-args condition)))))

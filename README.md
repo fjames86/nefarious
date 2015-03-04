@@ -4,26 +4,18 @@ An NFS implementation in Common Lisp.
 1. Introduction
 -----------------
 
-This is an attempt at implementing an NFS client and server in Common Lisp. The main aim for
-the project is to both as an educational tool for learning about implementing an NFS, and also
-as a robust test platform for developing its sister project, FRPC, the underlying ONC/RPC implementation.
-
-Performance and security are not at present significant concerns.
+Nefarious is an NFS implemention in Common Lisp.
 
 2. Aims
---------
+---------
 
-Immediate project aims:
-* Type in the RPC interface and handler stubs [DONE]
-* Choose a reference implementation. I've chosen FreeNFS, because it's for Windows which is where I do most development. [DONE]
-* Successfully call client RPCs against the reference NFS implementation. [ DONE ]
-* Fill in the handler stubs [ IN-PROGRESS ]
+* Provide a robust test-platform for the ONC-RPC implementation, frpc. These two packages have been
+developed in tandem.
+* Get the client-portion working. 
+* Implement a robust, generalized server component. The server should be able to export
+a generalized filesystem, not necessarily the underlying host filesystem (although it should be able
+to do that too).
 
-More general aims:
-* Write an NFS client and server which work in most situations
-* Performance and security are not at all important
-* This is an educational project only (at present)
-* Provide a robust test platform for developing the ONC/RPC framework, frpc. This is one of main purposes of the project.
 
 3. Client
 ----------
@@ -59,25 +51,30 @@ A new stream type which reads/writes to remote files, NFS-FILE-STREAM.
 4. Server 
 -----------
 
+The server component is an RPC server which implements the port-mapper, mount and NFS programs. 
+It listens on ports 111, 635 and 2049 (TCP and UDP).
+
 Run the server using:
 
 ```
-(nfs:start "/")
+(nfs:start)
 
 (nfs:stop)
 ```
 
-This starts an RPC server instance which listens on TCP and UDP ports 111, 635 and 2049.
+4.1 Providers
+--------------
 
-The intention is to be able to successfully mount and access the files from a reference NFS client
-implentation. I have chosen the standard Ubuntu NFS client. The aims are:
-* successfully run: $ mount -t nfs -o nolock,nfsvers=3 host:/ /media/nefarious
-* successfully enumerate files
-* create, read, write, remove files
-* create, remove directories
+Users should register providers to implement the NFS functionality. Providers are instances 
+of classes which inherit from NFS-PROVIDER. Users should specialize the generic functions 
+defined in providers.lisp to implement the functionality. See the provider in providers/simple.lisp,
+this exports the local host's filesystem. It is possible to define providers which export
+a virtual filesystem, the Windows registry etc.
 
-At present the PATH-CONF, FS-INFO and FS-STAT handlers have not been typed in. This prevents
-the mount command from working. The actual NFS commands do work however.
+```
+(register-provider (make-simple-provider) "/")
+(register-provider (make-simple-provider "/home") "/home")
+```
 
 5. License
 ------------
