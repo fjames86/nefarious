@@ -63,6 +63,7 @@
 	  #:find-provider
 	  #:provider-handle-fh
 	  #:fh-provider-handle
+
 	  ;; provider generic functions
 	  #:nfs-provider-mount
 	  #:nfs-provider-unmount
@@ -80,5 +81,6 @@
 	  #:nfs-provider-fs-info
 	  #:nfs-provider-fs-stat
 	  #:nfs-provider-path-conf
+
 	  ))
 

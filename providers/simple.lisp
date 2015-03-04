@@ -1,13 +1,14 @@
 ;;;; Copyright (c) Frank James 2015 <frank.a.james@gmail.com>
 ;;;; This code is licensed under the MIT license.
 
-(defpackage #:nefarious.providers.simple 
+;; providers
+(defpackage #:nefarious.providers.simple
   (:use #:cl #:nefarious)
   (:nicknames #:nfs.providers.simple)
-  (:export #:make-simple-provider))
+  (:export #:make-simple-provider
+	   #:simple-provider))
 
 (in-package #:nefarious.providers.simple)
-
 
 ;; -------------------------------------------------------------
 ;; Handles 
@@ -335,4 +336,3 @@ be a string naming the mount-point that is exported by NFS."
 		  :chown-restricted t ;; will reject any attempt to chown
 		  :case-insensitive nil ;; case insensitive filesystem
 		  :case-preserving t))
-

@@ -668,19 +668,22 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
   (:union nfs-stat3
     (:ok (:list post-op-attr cookie-verf3 dir-list3-plus))
     (otherwise post-op-attr))
-  (:arg-transformer (dhandle count &key max (cookie 0) cookie-verf)
+  (:arg-transformer (dhandle &key (count 65507) max (cookie 0) cookie-verf)
     (list dhandle cookie (or cookie-verf (make-cookie-verf3)) count (or max count)))
   (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(destructuring-bind (attr cverf dlist) (xunion-val res)
-	  (list attr cverf 
-		(make-dir-list3-plus 
-		 :eof (dir-list3-plus-eof dlist)
-		 :entries
-		 (do ((entries (dir-list3-plus-entries dlist) (%entry3-plus-next-entry entries))
-		      (elist nil))
-		     ((null entries) elist)
-		   (push (%entry3-plus-entry entries) elist)))))
+	  (values (do ((entries (dir-list3-plus-entries dlist) (%entry3-plus-next-entry entries))
+		       (elist nil))
+		      ((null entries) elist)
+		    (let ((entry (%entry3-plus-entry entries)))
+		      (push (list (entry3-plus-name entry)
+				  (entry3-plus-handle entry)
+				  (entry3-plus-attrs entry))
+			    elist)))
+		  (dir-list3-plus-eof dlist)
+		  attr
+		  cverf))
 	(error 'nfs-error :stat (xunion-tag res)))))
 
 (defhandler %handle-read-dir-plus (args 17)
