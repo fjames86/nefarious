@@ -1,7 +1,7 @@
 ;;;; Copyright (c) Frank James 2015 <frank.a.james@gmail.com>
 ;;;; This code is licensed under the MIT license.
 
-;; need CL-REGISTRY for this
+;; need CL-REGISTRY and CL-PPCRE for this
 
 (defpackage #:nefarious.registry
   (:use #:cl #:nefarious #:cl-registry)
@@ -28,10 +28,10 @@
 (defun make-rhandle (&key rhandle tree key name)
   (let ((handle 
 	 (%make-rhandle :tree (or tree (rhandle-tree rhandle))
-			:key (when rhandle
+			:key (when (or (and rhandle (rhandle-key rhandle)) key)
 			       (concatenate 'string 
-					    (rhandle-key rhandle)
-					    (when (and (rhandle-key rhandle) key) "\\")
+					    (when rhandle (rhandle-key rhandle))
+					    (when (and rhandle (rhandle-key rhandle) key) "\\")
 					    key))
 			:name name)))
     (setf (rhandle-fh handle)
@@ -86,8 +86,8 @@
 (defun find-rhandle (provider h)
   (gethash h (simple-provider-handles provider)))
 
-(defun make-registry-provider (path)
-  (let ((mhandle (parse-keypath path)))
+(defun make-registry-provider (tree &optional key)
+  (let ((mhandle (make-rhandle :tree tree :key key)))
     (let ((provider 
 	   (make-instance 'registry-provider
 			  :mount-handle mhandle)))
