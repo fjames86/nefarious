@@ -28,7 +28,7 @@
 	  #:call-path-conf
 	  #:call-commit
 
-	  ;; structures
+	  ;; some of the essential NFS structures
 	  #:fattr3
 	  #:make-fattr3
 	  #:nfs-time3
@@ -81,6 +81,13 @@
 	  #:nfs-provider-fs-info
 	  #:nfs-provider-fs-stat
 	  #:nfs-provider-path-conf
+
+	  ;; the simple (default) provdider
+	  #:make-simple-provider
+	  #:simple-provider
+	  #:simple-provider-handles
+	  #:simple-provider-clients
+	  #:simple-provider-mount-handle
 
 	  ))
 

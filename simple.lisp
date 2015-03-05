@@ -2,13 +2,8 @@
 ;;;; This code is licensed under the MIT license.
 
 ;; providers
-(defpackage #:nefarious.providers.simple
-  (:use #:cl #:nefarious)
-  (:nicknames #:nfs.providers.simple)
-  (:export #:make-simple-provider
-	   #:simple-provider))
 
-(in-package #:nefarious.providers.simple)
+(in-package #:nefarious)
 
 ;; -------------------------------------------------------------
 ;; Handles 

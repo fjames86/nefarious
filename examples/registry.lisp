@@ -63,15 +63,16 @@
     (:users . 2147483651) 
     (:current-config . 2147483653)))
 
+(defun resolve-key (key)
+  (etypecase key
+    (keyword (cdr (assoc key *hkey-trees*)))
+    (integer key)))
+
 (defconstant +desire-all-access+ #xf003f)
 
 (defun reg-open-key (name &key key (options 0) (desired +desire-all-access+))
   (with-foreign-object (handle 'hkey)
-    (let ((sts (%reg-open-key (cond
-				((integerp key) key)
-				((keywordp key)
-				 (cdr (assoc key *hkey-trees*)))
-				(t (error "Invalid key")))
+    (let ((sts (%reg-open-key (resolve-key key)
 			      name 
 			      options 
 			      desired
@@ -99,7 +100,7 @@
 
 (defun reg-create-key (name &key key (options 0) (desired +desire-all-access+))
   (with-foreign-object (handle 'hkey)
-    (let ((res (%reg-create-key (or key (cdr (assoc key *hkey-trees*)))
+    (let ((res (%reg-create-key (resolve-key key)
 				name 
 				0
 				(null-pointer)
@@ -131,7 +132,7 @@
 	   (done nil))
 	  (done names)
 	(setf (mem-ref size :uint32) 1024)
-	(let ((res (%reg-enum-key key 
+	(let ((res (%reg-enum-key (resolve-key key)
 				  i
 				  buffer
 				  size
@@ -176,7 +177,7 @@
 	(done vals)
       (setf (mem-ref size :uint32) 1024
 	    (mem-ref data-size :uint32) 1024)
-      (let ((res (%reg-enum-value key 
+      (let ((res (%reg-enum-value (resolve-key key)
 				  i
 				  name-buffer
 				  size
@@ -216,7 +217,7 @@
 	(dotimes (i length)
 	  (setf (mem-ref buffer :uint8 i)
 		(aref data i)))
-	(let ((res (%reg-set-value key 
+	(let ((res (%reg-set-value (resolve-key key)
 				   nstr
 				   0
 				   (second 
@@ -251,9 +252,42 @@
 
 
 ;; the provider class
-(defclass registry-provider (nfs-provider)
-  ((handles :initform (make-hash-table :test #'equalp) :reader provider-handles)
-   (clients :initform nil :accessor provider-clients)
-   (mount-handle :initarg :mount-handle :reader provider-mount-handle)))
+(defclass registry-provider (simple-provider)
+  ())
+
+;; basic idea:
+;; registry keys correspond to NFS directories.
+;; registry values correspond to NFS files.
+
+
+(defstruct (rhandle (:constructor %make-rhandle))
+  tree ;; keyword from *hkey-trees*, :local-machine, :current-user, etc
+  key ;; a string naming the full path to the key
+  name) ;; name of value (if any)
+
+
+(defun make-rhandle (tree key &optional name)
+  (%make-rhandle :tree tree
+		 :key key
+		 :name name))
+
+(defun parse-keypath (path)
+  "match the path agaisnt the regex <tree>\\<key>[:<value>]"
+  (multiple-value-bind (matched matches) 
+      (cl-ppcre:scan-to-strings "(HKLM|HKCU|HKCR|HKCC|HKUSERS)((\\\\\\w+)*):?(\\w+)?" path)
+    (when matched
+      (let ((tree (aref matches 0))
+	    (key (aref matches 1))
+	    (name (aref matches 3)))
+	(make-rhandle (cond
+			((string= tree "HKLM") :local-machine)
+			((string= tree "HKCU") :current-user)
+			((string= tree "HKCR") :classes-root)
+			((string= tree "HKCC") :current-config)
+			((string= tree "HKUSERS") :users)
+			(t (error "Invalid registry hive")))
+		      key
+		      name)))))
+
 
 

@@ -16,11 +16,7 @@
    (:file "interface" :depends-on ("errors"))
    (:file "server" :depends-on ("interface"))
    (:file "streams" :depends-on ("server"))
-   (:module :builtin-providers
-	    :pathname "providers"
-	    :components 
-	    ((:file "simple"))
-	    :depends-on ("streams")))
+   (:file "simple" :depends-on ("streams")))
   :depends-on (:frpc :cl-fad :trivial-gray-streams))
 
 
