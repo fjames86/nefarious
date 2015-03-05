@@ -1,6 +1,7 @@
 ;;;; Copyright (c) Frank James 2015 <frank.a.james@gmail.com>
 ;;;; This code is licensed under the MIT license.
 
+;; need CFFI and CL-PPCRE for this
 
 (defpackage #:nefarious.providers.registry
   (:use #:cl #:nefarious #:cffi))
@@ -24,6 +25,7 @@
   (args :pointer))
 
 (defun format-message (code)
+  "Use FormatMessage to convert the error code into a system-defined string."
   (with-foreign-object (buffer :char 1024)
     (let ((n (%format-message #x00001000
 			      (null-pointer)
@@ -44,6 +46,7 @@
 		     (format-message (win-error-code condition))))))
 	   
 		   
+;; --------- registry API ------------------
 
 (defctype hkey :uint32)
 
@@ -274,7 +277,7 @@
 (defun parse-keypath (path)
   "match the path agaisnt the regex <tree>\\<key>[:<value>]"
   (multiple-value-bind (matched matches) 
-      (cl-ppcre:scan-to-strings "(HKLM|HKCU|HKCR|HKCC|HKUSERS)((\\\\\\w+)*):?(\\w+)?" path)
+      (cl-ppcre:scan-to-strings "(HKLM|HKCU|HKCR|HKCC|HKUSERS)\\\\((\\w+\\\\?)*):?(\\w+)?" path)
     (when matched
       (let ((tree (aref matches 0))
 	    (key (aref matches 1))
