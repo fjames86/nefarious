@@ -3,10 +3,12 @@
 
 ;; need CFFI and CL-PPCRE for this
 
-(defpackage #:nefarious.providers.registry
-  (:use #:cl #:nefarious #:cffi))
+(defpackage #:nefarious.registry
+  (:use #:cl #:nefarious #:cffi)
+  (:nicknames #:nfs.registry)
+  (:export #:make-registry-provider))
 
-(in-package #:nefarious.providers.registry)
+(in-package #:nefarious.registry)
 
 (define-foreign-library advapi
   (:windows "Advapi32.dll"))
@@ -89,6 +91,16 @@
   (key hkey))
 
 
+(defmacro with-reg-key ((var name &key key) &body body)
+  `(let ((,var (reg-open-key ,name :key ,key)))
+     (unwind-protect (progn ,@body)
+       (reg-close-key ,var))))
+
+
+
+
+
+
 (defcfun (%reg-create-key "RegCreateKeyExA" :convention :stdcall)
     :long
   (key hkey)
@@ -127,26 +139,29 @@
   (class-size :pointer)
   (last-write :pointer))
 
-(defun reg-enum-key (key)
-  (with-foreign-object (buffer :char 1024)
-    (with-foreign-object (size :uint32)
-      (do ((i 0 (1+ i))
-	   (names nil)
-	   (done nil))
-	  (done names)
-	(setf (mem-ref size :uint32) 1024)
-	(let ((res (%reg-enum-key (resolve-key key)
-				  i
-				  buffer
-				  size
-				  (null-pointer)
-				  (null-pointer)
-				  (null-pointer)
-				  (null-pointer))))
-	  (if (= res 0)
-	      (push (foreign-string-to-lisp buffer :count (mem-ref size :uint32))
-		    names)
-	      (setf done t)))))))
+(defun reg-enum-key (key &optional tree)
+  (if (stringp key)
+      (with-reg-key (k key :key tree)
+	(reg-enum-key k))
+      (with-foreign-object (buffer :char 1024)
+	(with-foreign-object (size :uint32)
+	  (do ((i 0 (1+ i))
+	       (names nil)
+	       (done nil))
+	      (done names)
+	    (setf (mem-ref size :uint32) 1024)
+	    (let ((res (%reg-enum-key (resolve-key key)
+				      i
+				      buffer
+				      size
+				      (null-pointer)
+				      (null-pointer)
+				      (null-pointer)
+				      (null-pointer))))
+	      (if (= res 0)
+		  (push (foreign-string-to-lisp buffer :count (mem-ref size :uint32))
+			names)
+		  (setf done t))))))))
 
 				  
 
@@ -168,41 +183,44 @@
     (:dword 4)
     (:multi-string 7)))
 
-(defun reg-enum-value (key)
-  (with-foreign-objects ((name-buffer :char 1024)
-			 (size :uint32)
-			 (data :char 1024)
-			 (data-size :uint32)
-			 (type :uint32))
-    (do ((i 0 (1+ i))
-	 (vals nil)
-	 (done nil))
-	(done vals)
-      (setf (mem-ref size :uint32) 1024
-	    (mem-ref data-size :uint32) 1024)
-      (let ((res (%reg-enum-value (resolve-key key)
-				  i
-				  name-buffer
-				  size
-				  (null-pointer)
-				  type
-				  data
-				  data-size)))
-	(if (= res 0)
-	    (push 
-	     (let ((vec (make-array (mem-ref data-size :uint32)
-				    :element-type '(unsigned-byte 8))))
-	       (dotimes (i (mem-ref data-size :uint32))
-		 (setf (aref vec i) (mem-ref data :uint8 i)))
-	       (list (foreign-string-to-lisp name-buffer 
-					     :count (mem-ref size :uint32))
-		     vec 
-		     (first 
-		      (find (mem-ref type :uint32)
-			    *reg-types*
-			    :key #'second))))
-	     vals)
-	    (setf done t))))))
+(defun reg-enum-value (key &optional tree)
+  (if (stringp key)
+      (with-reg-key (k key :key tree)
+	(reg-enum-value k))
+      (with-foreign-objects ((name-buffer :char 1024)
+			     (size :uint32)
+			     (data :char 1024)
+			     (data-size :uint32)
+			     (type :uint32))
+	(do ((i 0 (1+ i))
+	     (vals nil)
+	     (done nil))
+	    (done vals)
+	  (setf (mem-ref size :uint32) 1024
+		(mem-ref data-size :uint32) 1024)
+	  (let ((res (%reg-enum-value (resolve-key key)
+				      i
+				      name-buffer
+				      size
+				      (null-pointer)
+				      type
+				      data
+				      data-size)))
+	    (if (= res 0)
+		(push 
+		 (let ((vec (make-array (mem-ref data-size :uint32)
+					:element-type '(unsigned-byte 8))))
+		   (dotimes (i (mem-ref data-size :uint32))
+		     (setf (aref vec i) (mem-ref data :uint8 i)))
+		   (list (foreign-string-to-lisp name-buffer 
+						 :count (mem-ref size :uint32))
+			 vec 
+			 (first 
+			  (find (mem-ref type :uint32)
+				*reg-types*
+				:key #'second))))
+		 vals)
+		(setf done t)))))))
 
 (defcfun (%reg-set-value "RegSetValueExA" :convention :stdcall)
     :long
@@ -214,6 +232,9 @@
   (size :uint32))
 
 (defun reg-set-value (key name data type)
+  (declare (type vector data)
+	   (type symbol type)
+	   (type string name))
   (let ((length (length data)))
     (with-foreign-object (buffer :uint8 length)
       (with-foreign-string (nstr name)
@@ -244,12 +265,81 @@
 	  nil
 	  (error 'win-error :code res)))))
 
+(defcfun (%reg-set-key-value "RegSetKeyValueA" :convention :stdcall)
+    :long
+  (key hkey)
+  (subkey :string)
+  (name :string)
+  (type :uint32)
+  (data :pointer)
+  (length :uint32))
 
-(defmacro with-reg-key ((var name &key key) &body body)
-  `(let ((,var (reg-open-key ,name :key ,key)))
-     (unwind-protect (progn ,@body)
-       (reg-close-key ,var))))
+(defun reg-set-key-value (key name data &key subkey (type :string))
+  (let ((length (length data)))
+    (with-foreign-object (buffer :uint8 length)
+      (with-foreign-strings ((nstr name)
+			     (skstr (or subkey "")))
+	(let ((res (%reg-set-key-value (resolve-key key)
+				       (if subkey skstr (null-pointer))
+				       nstr
+				       (second (find type *reg-types* :key #'first))
+				       buffer
+				       length)))
+	  (if (= res 0)
+	      nil
+	      (error 'win-error :code res)))))))
 
+
+(defcfun (%reg-delete-tree "RegDeleteTreeA" :convention :stdcall)
+    :long
+  (key hkey)
+  (subkey :string))
+
+(defun reg-delete-tree (key &optional subkey)
+  (with-foreign-string (skstr (or subkey ""))
+    (let ((res (%reg-delete-tree (resolve-key key)
+				 (if subkey skstr (null-pointer)))))
+      (if (= res 0)
+	  nil
+	  (error 'win-error :code res)))))
+
+(defcfun (%reg-get-value "RegGetValueA" :convention :stdcall)
+    :long
+  (key hkey)
+  (subkey :string)
+  (name :string)
+  (flags :uint32)
+  (type :pointer)
+  (data :pointer)
+  (size :pointer))
+
+(defun reg-get-value (key name &optional subkey)
+  (if (and subkey (stringp subkey))
+      (with-reg-key (k subkey :key key)
+	(reg-get-value k name))
+      (with-foreign-strings ((nstr name)
+			     (skstr (or subkey "")))
+	(with-foreign-objects ((buffer :uint8 1024)
+			       (sbuff :uint32)
+			       (tbuff :uint32))
+	  (setf (mem-ref sbuff :uint32) 1024)
+	  (let ((res 
+		 (%reg-get-value (resolve-key key)
+				 (if subkey skstr (null-pointer))
+				 nstr
+				 #xffff ;; any data type
+				 tbuff
+				 buffer
+				 sbuff)))
+	    (if (= res 0)
+		(values 
+		 (let ((v (make-array (mem-ref sbuff :uint32) :element-type '(unsigned-byte 8))))
+		   (dotimes (i (mem-ref sbuff :uint32))
+		     (setf (aref v i) (mem-ref buffer :uint8 i)))
+		   v)
+		 (first (find (mem-ref tbuff :uint32) *reg-types* :key #'second)))
+		(error 'win-error :code res)))))))
+		      
 
 ;; ---------------------------------
 
@@ -266,13 +356,25 @@
 (defstruct (rhandle (:constructor %make-rhandle))
   tree ;; keyword from *hkey-trees*, :local-machine, :current-user, etc
   key ;; a string naming the full path to the key
-  name) ;; name of value (if any)
+  name ;; name of value (if any)
+  fh) 
 
-
-(defun make-rhandle (tree key &optional name)
-  (%make-rhandle :tree tree
-		 :key key
-		 :name name))
+(defun make-rhandle (&key rhandle tree key name)
+  (let ((handle 
+	 (%make-rhandle :tree (or tree (rhandle-tree rhandle))
+			:key (when rhandle
+			       (concatenate 'string 
+					    (rhandle-key rhandle)
+					    (when (and (rhandle-key rhandle) key) "\\")
+					    key))
+			:name name)))
+    (setf (rhandle-fh handle)
+	  (frpc:pack #'frpc::write-uint64 
+		     (sxhash (concatenate 'string
+					  (symbol-name (rhandle-tree handle))
+					  (rhandle-key handle)
+					  (rhandle-name handle)))))
+    handle))
 
 (defun parse-keypath (path)
   "match the path agaisnt the regex <tree>\\<key>[:<value>]"
@@ -282,15 +384,248 @@
       (let ((tree (aref matches 0))
 	    (key (aref matches 1))
 	    (name (aref matches 3)))
-	(make-rhandle (cond
-			((string= tree "HKLM") :local-machine)
-			((string= tree "HKCU") :current-user)
-			((string= tree "HKCR") :classes-root)
-			((string= tree "HKCC") :current-config)
-			((string= tree "HKUSERS") :users)
-			(t (error "Invalid registry hive")))
-		      key
-		      name)))))
+	(make-rhandle :tree (cond
+			      ((string= tree "HKLM") :local-machine)
+			      ((string= tree "HKCU") :current-user)
+			      ((string= tree "HKCR") :classes-root)
+			      ((string= tree "HKCC") :current-config)
+			      ((string= tree "HKUSERS") :users)
+			      (t (error "Invalid registry hive")))
+		      :key (when (and key (not (string= key "")))
+			     key)
+		      :name name)))))
 
+(defun rhandle-exists-p (rhandle)
+  "Check whether the registry key/value specified by the handle actually exists."
+  (handler-case 
+      (progn
+	(if (rhandle-name rhandle)
+	    (reg-get-value (rhandle-tree rhandle) 
+			   (rhandle-name rhandle)
+			   (rhandle-key rhandle))
+	    (with-reg-key (k (rhandle-key rhandle) :key (rhandle-tree rhandle))))
+	t)
+    (error ()
+      nil)))
+
+(defun allocate-rhandle (provider rhandle &key key name)
+  (let ((handle (make-rhandle :rhandle rhandle
+			      :key key 
+			      :name name)))
+    (setf (gethash (rhandle-fh handle)
+		   (simple-provider-handles provider))
+	  handle)
+    handle))
+
+(defun find-rhandle (provider h)
+  (gethash h (simple-provider-handles provider)))
+
+(defun make-registry-provider (path)
+  (let ((mhandle (parse-keypath path)))
+    (let ((provider 
+	   (make-instance 'registry-provider
+			  :mount-handle mhandle)))
+      (allocate-rhandle provider mhandle)
+      provider)))
+
+;; ------------------------------------------
+;; for the mount protocol
+(defmethod nfs-provider-mount ((provider registry-provider) client)
+  (pushnew client (simple-provider-clients provider) 
+	   :test #'equalp)
+  (rhandle-fh (simple-provider-mount-handle provider)))
+
+(defmethod nfs-provider-unmount ((provider registry-provider) client)
+  (setf (simple-provider-clients provider)
+	(remove client (simple-provider-clients provider)
+		:test #'equalp))
+  nil)
+
+;; for nfs
+(defmethod nfs-provider-attrs ((provider registry-provider) fh)
+  (let ((rhandle (find-rhandle provider fh)))
+    (if rhandle
+	(let ((name (rhandle-name rhandle)))
+	  (make-fattr3 :type (if name :reg :dir)
+		       :mode 0
+		       :uid 0
+		       :gid 0
+		       :size (if name 1024 0)
+		       :used (if name 1024 0)
+		       :fileid 0
+		       :atime (make-nfs-time3)
+		       :mtime (make-nfs-time3)
+		       :ctime (make-nfs-time3)))
+	(error 'nfs-error :stat :bad-handle))))
+
+;; don't support this
+;;(defmethod (setf nfs-provider-attrs) (value (provider simple-provider) handle)
+;;  nil)
+
+(defmethod nfs-provider-lookup ((provider registry-provider) dh name)
+  (let ((dhandle (find-rhandle provider dh)))
+    (if dhandle 
+	(let ((handle (make-rhandle :rhandle dhandle
+				    :key name)))
+	  (cond
+	    ((rhandle-exists-p handle)
+	     (allocate-rhandle provider dhandle :key name)
+	     (rhandle-fh handle))
+	    (t 
+	     (let ((handle (make-rhandle :rhandle dhandle
+					 :name name)))
+	       (cond
+		 ((rhandle-exists-p handle)
+		  (allocate-rhandle provider dhandle :name name)
+		  (rhandle-fh handle))
+		 (t 
+		  (error 'nfs-error :stat :noent)))))))
+	(error 'nfs-error :stat :noent))))
+
+(defmethod nfs-provider-read ((provider registry-provider) fh offset count)
+  "Read count bytes from offset from the object."
+  (let ((handle (find-rhandle provider fh)))
+    (if (and handle (rhandle-name handle))
+	(handler-case 
+	    (reg-get-value (rhandle-tree handle)
+			   (rhandle-name handle)
+			   (rhandle-key handle))
+	  (error (e)
+	    (log:debug "~A" e)
+	    (error 'nfs-error :stat :noent)))
+	(error 'nfs-error :stat :bad-handle))))
+
+(defmethod nfs-provider-write ((provider registry-provider) fh offset bytes)
+  "Write bytes at offset to the object. Returns the number of bytes written."
+  (let ((handle (find-rhandle provider fh)))
+    (if (and handle (rhandle-name handle))
+	(handler-case 
+	    (reg-set-key-value (rhandle-tree handle)
+			       (rhandle-name handle)
+			       bytes
+			       :subkey (rhandle-key handle)
+			       :type :binary)
+	  (error (e)
+	    (log:debug "~A" e)
+	    (error 'nfs-error :stat :noent)))
+	(error 'nfs-error :stat :bad-handle))))
+
+(defmethod nfs-provider-create ((provider registry-provider) dh name)
+  "Create a new file named NAME in directory DHANDLE."
+  (let ((dhandle (find-rhandle provider dh)))
+    (if dhandle
+	(let ((handle (allocate-rhandle provider
+					dhandle
+					:name name)))
+	  (handler-case 
+	      (reg-set-key-value (rhandle-tree handle)
+				 name
+				 #()
+				 :subkey (rhandle-key handle)
+				 :type :binary)
+	    (error (e)
+	      (log:debug "~A" e)
+	      (error 'nfs-error :noent))))
+	(error 'nfs-error :bad-handle))))
+
+(defmethod nfs-provider-remove ((provider registry-provider) dh name)
+  "Remove the file named HANDLE."
+  (let ((dhandle (find-rhandle provider dh)))
+    (if dhandle
+	(handler-case 
+	    (with-reg-key (k (rhandle-key dhandle) :key (rhandle-tree dhandle))
+	      (reg-delete-value k name))
+	  (error (e)
+	    (log:debug "~A" e)
+	    (error 'nfs-error :stat :noent)))
+	(error 'nfs-error :stat :bad-handle))))
+
+(defmethod nfs-provider-rename ((provider registry-provider) fdh fname tdh tname)
+  "Rename the file named by the FROM-DHANDLE/FROM-NAME."
+  (error 'nfs-error :stat :server-fault))
+
+(defmethod nfs-provider-read-dir ((provider registry-provider) dh)
+  "Returns a list of all object (file and directory) names in the directory."
+  (let ((dhandle (find-rhandle provider dh)))
+    (if dhandle
+	(handler-case 
+	    (append 
+	     (reg-enum-key (or (rhandle-key dhandle) "")
+			   (rhandle-tree dhandle))
+	     (mapcar #'car (reg-enum-value (or (rhandle-key dhandle) "")
+					   (rhandle-tree dhandle))))			   
+	  (error (e)
+	    (log:debug "~A" e)
+	    (error 'nfs-error :stat :noent)))
+	(error 'nfs-error :stat :bad-handle))))
+
+(defmethod nfs-provider-create-dir ((provider registry-provider) dh name)
+  "Create a new directory."
+  (let ((dhandle (find-rhandle provider dh)))
+    (if dhandle 
+	(handler-case 
+	    (let ((handle (allocate-rhandle provider dhandle :name name)))
+	      (reg-set-key-value (rhandle-tree handle)
+				 name
+				 #()
+				 :subkey (rhandle-key handle)
+				 :type :binary)
+	      (rhandle-fh handle))
+	  (error (e)
+	    (log:debug "~A" e)
+	    (error 'nfs-error :stat :noent)))
+	(error 'nfs-error :stat :bad-handle))))
+
+
+(defmethod nfs-provider-remove-dir ((provider registry-provider) dh name)
+  "Remove a directory."
+    (let ((dhandle (find-rhandle provider dh)))
+      (if dhandle
+	  (handler-case 
+	      (reg-delete-tree (rhandle-tree dhandle)
+			       (rhandle-key dhandle))
+	    (error (e)
+	      (log:debug "~A" e)
+	      (error 'nfs-error :stat :server-fault)))
+	  (error 'nfs-error :stat :bad-handle))))
+
+
+;; filesystem information
+(defmethod nfs-provider-fs-info ((provider registry-provider))
+  "Returns dynamic filesystem information, in an FS-INFO structure."
+  (make-fs-info :attrs nil ;; attributes of the file 
+		:rtmax 1024 ;; maximum read request count
+		:rtpref 1024 ;; preferred read count -- should be same as rtmax
+		:rtmult 4 ;; suggested multiple for read requests
+		:wtmax 1024 ;; maximum write request count 
+		:wtpref 1024 ;; preferred write count
+		:wtmult 4 ;; suggested multiple for writes
+		:dtpref #xffffffff ;; preferred size for read-dir
+		:max-fsize 1024 ;; maximum file size
+		:time-delta (make-nfs-time3 :seconds 1)
+		:properties (frpc:enum 'nefarious::nfs-info :homogenous)))
+
+
+(defmethod nfs-provider-fs-stat ((provider registry-provider))
+  "Returns static filesystem information, in an FS-STAT structure."
+  (make-fs-stat :attrs nil ;; fileattribvutes
+		:tbytes #xffffffff ;; total size of the filesystem
+		:fbytes #xffffffff ;; free bytes
+		:abytes #xffffffff ;; available bytes
+		:tfiles #xffffffff ;; total file slots
+		:ffiles #xffffffff ;; total number of free file slots
+		:afiles #xffffffff ;; available file slots
+		:invarsec 1))
+
+(defmethod nfs-provider-path-conf ((provider registry-provider))
+  "Returns a PATH-CONF structure containing information about the filesystem."
+  (make-path-conf :attr nil ;; file attributes
+		  :link-max 0 ;; max link size
+		  :link-max 0 ;; maximum number of hard links to an object
+		  :name-max 255 ;; maximum file name
+		  :no-trunc t ;; if T the server will reject any request with a name longer than 
+		  :chown-restricted t ;; will reject any attempt to chown
+		  :case-insensitive t ;; case insensitive filesystem
+		  :case-preserving t))
 
 

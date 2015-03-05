@@ -11,9 +11,10 @@
 
 (defclass nfs-provider ()
   ((id :initform (prog1 *provider-id* (incf *provider-id*)) :reader provider-id)
-   (path :initform "/" :initarg :path :reader provider-path)))
+   (path :initform "/" :initarg :path :accessor provider-path)))
 
-(defun register-provider (provider)
+(defun register-provider (provider export-path)
+  (setf (provider-path provider) export-path)
   (let ((old (find-provider (provider-path provider))))
     (cond
       (old
