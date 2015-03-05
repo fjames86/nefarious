@@ -106,12 +106,11 @@ the handles list. Returns the newly allocated handle."
     (push handle (handle-children dhandle))
     handle))
 
-(defun make-simple-provider (export-path &optional local-path)
+(defun make-simple-provider (&optional local-path)
   "Make a SIMPLE-PROVIDER instance. PATH should be the local filesystem path to export, EXPORT-PATH should 
 be a string naming the mount-point that is exported by NFS."
   (let ((handle (make-mount-handle (or local-path (merge-pathnames (make-pathname))))))
     (let ((provider (make-instance 'simple-provider
-				   :path export-path
 				   :mount-handle handle)))
       (setf (gethash (handle-fh handle) (simple-provider-handles provider))
 	    handle)

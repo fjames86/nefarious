@@ -67,13 +67,31 @@ Run the server using:
 
 Users should register providers to implement the NFS functionality. Providers are instances 
 of classes which inherit from NFS-PROVIDER. Users should specialize the generic functions 
-defined in providers.lisp to implement the functionality. See the provider in providers/simple.lisp,
-this exports the local host's filesystem. It is possible to define providers which export
+defined in providers.lisp to implement the functionality of each NFS method. 
+See the  simple provider or the examples. It is possible to define providers which export
 a virtual filesystem, the Windows registry etc.
 
+4.1.1 Simple provider
+----------------------
+
+The default provider, SIMPLE-PROVIDER, can be used to export a directory from the local filesystem.
+
 ```
+;; registers a simple provider that exports the directory named by *default-pathname-defaults* as "/"
 (register-provider (make-simple-provider) "/")
-(register-provider (make-simple-provider "/home") "/home")
+
+;; registers a simple provider that exports the administrator home directory
+(register-provider (make-simple-provider "C:\\Users\\administrator") "/admin")
+```
+
+4.1.2 Registry provider
+-------------------------
+
+Windows only. Exports the windows registry as an NFS filesystem.
+
+```
+;; export the HKEY_LOCAL_MACHINE hive as "/reg"
+(register-provider (nfs.registry:make-registry-provider "HKLM\\") "/reg")
 ```
 
 5. License
