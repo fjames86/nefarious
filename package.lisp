@@ -81,6 +81,7 @@
 	  #:nfs-provider-fs-info
 	  #:nfs-provider-fs-stat
 	  #:nfs-provider-path-conf
+	  #:nfs-provider-create-device 
 
 	  ;; the simple (default) provdider
 	  #:make-simple-provider

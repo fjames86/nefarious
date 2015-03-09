@@ -1,27 +1,15 @@
 # nefarious
-An NFS implementation in Common Lisp.
+An NFS client and server in Common Lisp.
 
-1. Introduction
+## 1. Introduction
 -----------------
 
-Nefarious is an NFS implemention in Common Lisp.
+Nefarious is an NFS implemention (both client and server) in Common Lisp, currently only NFSv3 is supported. 
 
-2. Aims
----------
-
-* Provide a robust test-platform for the ONC-RPC implementation, frpc. These two packages have been
-developed in tandem.
-* Get the client-portion working. 
-* Implement a robust, generalized server component. The server should be able to export
-a generalized filesystem, not necessarily the underlying host filesystem (although it should be able
-to do that too).
-
-
-3. Client
+## 2. Client
 ----------
 
-All the NFS and mount protocol messages are implemented and should be functioning. Look at the exported 
-symbols startinn with CALL- from the nefarious and nefarious.mount packages.
+All the NFS and mount protocol messages are implemented. 
 
 ```
 (defvar dhandle (nfs.mount:call-mount "/"))
@@ -35,20 +23,20 @@ symbols startinn with CALL- from the nefarious and nefarious.mount packages.
 (nfs.mount:call-unmount "/")
 ```
 
-3.1 NFS file streams
+## 2.1 NFS file streams
 ---------------------
 
-A new stream type which reads/writes to remote files, NFS-FILE-STREAM.
+A stream type which reads/writes to remote files, NFS-FILE-STREAM.
 
 ```
 (with-nfs-mount (dhandle "/" :host "xxx")
-  (with-nfs-file (dhandle f "foo.txt" :host "xxx")
+  (with-nfs-file (f dhandle "foo.txt" :host "xxx")
     (let ((buffer (make-array 16)))
       (read-sequence buffer f)
       buffer)))
 ```
 
-4. Server 
+## 3. Server 
 -----------
 
 The server component is an RPC server which implements the port-mapper, mount and NFS programs. 
@@ -62,7 +50,7 @@ Run the server using:
 (nfs:stop)
 ```
 
-4.1 Providers
+### 3.1 Providers
 --------------
 
 Users should register providers to implement the NFS functionality. Providers are instances 
@@ -71,7 +59,7 @@ defined in providers.lisp to implement the functionality of each NFS method.
 See the  simple provider or the examples. It is possible to define providers which export
 a virtual filesystem, the Windows registry etc.
 
-4.1.1 Simple provider
+#### 3.1.1 Simple provider
 ----------------------
 
 The default provider, SIMPLE-PROVIDER, can be used to export a directory from the local filesystem.
@@ -84,7 +72,7 @@ The default provider, SIMPLE-PROVIDER, can be used to export a directory from th
 (register-provider (make-simple-provider "C:\\Users\\administrator") "/admin")
 ```
 
-4.1.2 Registry provider
+#### 3.1.2 Registry provider
 -------------------------
 
 Windows only. Exports the windows registry as an NFS filesystem. 
@@ -97,7 +85,7 @@ Windows only. Exports the windows registry as an NFS filesystem.
 (register-provider (nfs.registry:make-registry-provider :local-machine "SOFTWARE") "/hklm/software")
 ```
 
-5. License
+## 4. License
 ------------
 
 Released under the terms of the MIT license.
