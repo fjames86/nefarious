@@ -1,7 +1,7 @@
 ;;;; Copyright (c) Frank James 2015 <frank.a.james@gmail.com>
 ;;;; This code is licensed under the MIT license.
 
-;; need CL-REGISTRY and CL-PPCRE for this
+;; need CFFI and CL-PPCRE for this
 
 (defpackage #:nefarious.registry
   (:use #:cl #:nefarious #:cffi)
