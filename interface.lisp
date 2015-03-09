@@ -17,13 +17,6 @@
 ;; ------------------------------------------------------
 ;; GETATTR3res NFSPROC3_GETATTR(GETATTR3args)         = 1;
 
-;; getattr  - get file attributes
-;;(defxtype* get-attr-args () nfs-fh3)
-;;(defxtype* get-attr-res-ok () fattr3)
-;;(defxunion get-attr-res (nfs-stat3)
-;;  ((:ok get-attr-res-ok)
-;;   (otherwise :void)))
-
 (defrpc call-get-attr 1 
   nfs-fh3 
   (:union nfs-stat3
@@ -44,13 +37,6 @@
 
 ;; ------------------------------------------------------
 ;; SETATTR3res NFSPROC3_SETATTR(SETATTR3args)         = 2;
-
-;; setattr -- set file attributes
-;;(defxtype* sattr-guard () (:optional nfs-time3))
-;;(defxstruct set-attr-args ()
-;;  ((object nfs-fh3)
-;;   (new-attrs sattr3)
-;;   (guard sattr-guard)))
 
 (defrpc call-set-attr 2 
   (:list nfs-fh3 sattr3 (:optional nfs-time3))
@@ -92,7 +78,7 @@
   (with-slots (dir name) arg
     (destructuring-bind (provider dh) (fh-provider-handle dir)
       (if provider 
-	  (handler-case 
+	  (handler-case 	      
 	      (let ((handle (nfs-provider-lookup provider dh name)))
 		(if handle 
 		    (make-xunion :ok (list (provider-handle-fh provider handle)
@@ -131,10 +117,6 @@
 	    (when (logand access (enum 'nfs-access sym))
 	      (list sym)))
 	  '(:read :lookup :modify :extend :delete :execute)))
-
-;;(defxstruct access-args ()
-;;  ((object nfs-fh3)
-;;   (access :uint32)))
 
 (defrpc call-access 4 
   (:list nfs-fh3 :uint32)
@@ -275,21 +257,6 @@ of NFS-ACCESS flag symbols. Returns (values post-op-attr access"))
    (:guarded 1)
    (:exclusive 2)))
 
-;;(defxunion create-how3 (create-mode3)
-;;  (((:unchecked :guarded) sattr3)
-;;   (:exclusive create-verf3)))
-;;(defxstruct create-args ()
-;;  ((where dir-op-args3)
-;;   (how create-how3)))
-;;(defxstruct create-res-ok ()
-;;  ((obj post-op-fh3)
-;;   (obj-attrs post-op-attr)
-;;   (dir-wcc wcc-data)))
-;;(defxtype* create-res-fail () wcc-data)
-;;(defxunion create-res (nfs-stat3)
-;;  ((:ok create-res-ok)
-;;   (otherwise create-res-fail)))
-
 (defrpc call-create 8 
   (:list dir-op-args3 
 	 (:union create-mode3 
@@ -376,10 +343,6 @@ of NFS-ACCESS flag symbols. Returns (values post-op-attr access"))
 ;; symlink -- create a symbolic link
 ;; SYMLINK3res NFSPROC3_SYMLINK(SYMLINK3args)         = 10;
 
-;;(defxtype* symlink-data3 ()
-;;  (:alist (:attrs sattr3)
-;;	  (:data nfs-path3)))
-
 (defrpc call-create-symlink 10 
   (:list dir-op-args3 sattr3 nfs-path3)
   (:union nfs-stat3
@@ -430,11 +393,34 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
 	(error 'nfs-error :stat (xunion-tag res))))
   (:documentation "Create special device."))
 
-;; dont support this
-;;(defhandler %handle-mknod (args 11)
-;;  (destructuring-bind (dirop spec) args
-;;    (declare (ignore dirop spec))
-;;    (make-xunion :ok (list nil nil (make-wcc-data)))))
+(defhandler %handle-mknod (args 11)
+  (destructuring-bind (dirop spec) args
+    (with-slots (dir name) dirop
+      (destructuring-bind (provider dh) (fh-provider-handle dir)
+	(log:debug "Creating device ~A ~S" name spec)
+	(if provider 
+	    (handler-case 
+		(let ((fh (nfs-provider-create-device provider 
+						      (xunion-tag spec)
+						      dh 
+						      name
+						      :attrs (case (xunion-tag spec)
+							       ((:chr :blk) (first (xunion-val spec)))
+							       ((:sock :fifo) (xunion-val spec)))
+						      :specdata (case (xunion-tag spec)
+								  ((:chr :blk) (second (xunion-val spec)))))))
+		  (make-xunion :ok 
+			       (list fh 
+				     (nfs-provider-attrs provider fh)
+				     (make-wcc-data))))
+	      (nfs-error (e)
+		(log:debug "~A" e)
+		(make-xunion (nfs-error-stat e) (make-wcc-data)))
+	      (error (e)
+		(log:debug "~A" e)
+		(make-xunion :server-fault (make-wcc-data))))
+	    (make-xunion :bad-handle (make-wcc-data)))))))
+
 
 
 ;; ------------------------------------------------------
@@ -639,13 +625,6 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
 
 ;; ------------------------------------------------------
 ;; read dir plus -- extended read from directory 
-
-;;(defxstruct read-dir-plus-args ()
-;;  ((dir nfs-fh3)
-;;   (cookie cookie3)
-;;   (verf cookie-verf3)
-;;   (count count3)
-;;   (max count3)))
 
 (defxstruct entry3-plus ()
   ((fileid fileid3)

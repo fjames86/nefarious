@@ -211,10 +211,18 @@ be a string naming the mount-point that is exported by NFS."
 (defmethod nfs-provider-lookup ((provider simple-provider) dh name)
   (let ((dhandle (find-handle provider dh)))
     (if dhandle 	
-	(let ((handle (allocate-handle provider dhandle name)))
-	  (if handle
-	      (handle-fh handle)
-	      (error 'nfs-error :stat :noent)))
+	(cond
+	  ((string= name ".") dh)
+	  ((string= name "..") 
+	   (let ((ph (handle-parent dhandle)))
+	     (if ph 
+		 ph
+		 (error 'nfs-error :stat :noent))))
+	  (t 
+	   (let ((handle (allocate-handle provider dhandle name)))
+	     (if handle
+		 (handle-fh handle)
+		 (error 'nfs-error :stat :noent)))))
 	(error 'nfs-error :stat :noent))))
 
 (defmethod nfs-provider-access ((provider simple-provider) handle access)

@@ -101,6 +101,9 @@ Returns a list of the valid access privileges."))
 (defgeneric nfs-provider-remove-dir (provider dhandle name)
   (:documentation "Remove a directory named NAME in directory DHANDLE."))
 
+(defgeneric nfs-provider-create-device (provider type dhandle name &key attrs specdata)
+  (:documentation "Create a special device. Type should be an ftype3 enum."))
+
 ;; filesystem information
 (defgeneric nfs-provider-fs-info (provider)
   (:documentation "Returns dynamic filesystem information, in an FS-INFO structure."))

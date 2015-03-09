@@ -364,7 +364,8 @@
   tree ;; keyword from *hkey-trees*, :local-machine, :current-user, etc
   key ;; a string naming the full path to the key
   name ;; name of value (if any)
-  fh) 
+  fh
+  parent) 
 
 (defun make-rhandle (&key rhandle tree key name)
   (let ((handle 
@@ -374,7 +375,8 @@
 					    (when rhandle (rhandle-key rhandle))
 					    (when (and rhandle (rhandle-key rhandle) key) "\\")
 					    key))
-			:name name)))
+			:name name
+			:parent (when rhandle (rhandle-fh rhandle)))))
     (setf (rhandle-fh handle)
 	  (frpc:pack #'frpc::write-uint64 
 		     (sxhash (concatenate 'string
@@ -480,6 +482,12 @@
 	(let ((handle (make-rhandle :rhandle dhandle
 				    :key name)))
 	  (cond
+	    ((string= name ".") dh)
+	    ((string= name "..") 
+	     (let ((ph (rhandle-parent handle)))
+	       (if ph
+		   ph
+		   (error 'nfs-error :stat :noent))))
 	    ((rhandle-exists-p handle)
 	     (allocate-rhandle provider dhandle :key name)
 	     (rhandle-fh handle))
@@ -567,6 +575,7 @@
     (if dhandle
 	(handler-case 
 	    (append 
+	     '("." "..")
 	     (reg-enum-key (or (rhandle-key dhandle) "")
 			   (rhandle-tree dhandle))
 	     (mapcar #'car (reg-enum-value (or (rhandle-key dhandle) "")
