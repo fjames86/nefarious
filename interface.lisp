@@ -96,7 +96,7 @@
 	      (let ((handle (nfs-provider-lookup provider dh name)))
 		(if handle 
 		    (make-xunion :ok (list (provider-handle-fh provider handle)
-					   nil 
+					   (nfs-provider-attrs provider handle)
 					   nil))
 		    (make-xunion :noent nil)))
 	    (nfs-error (e)
@@ -211,7 +211,7 @@ of NFS-ACCESS flag symbols. Returns (values post-op-attr access"))
 	  (handler-case 
 	      (let ((bytes (nfs-provider-read provider handle offset count)))
 		(make-xunion :ok
-			     (list nil
+			     (list (nfs-provider-attrs provider handle)
 				   (length bytes)
 				   (if (< (length bytes) count)
 				       t

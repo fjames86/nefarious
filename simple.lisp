@@ -29,9 +29,12 @@
 			      v)
 			:pathname pathname
 			:parent (handle-fh dhandle)
-			:directory-p (and (cl-fad:directory-pathname-p pathname)
-					  (cl-fad:directory-exists-p pathname)
-					  t))))
+			:directory-p (or ;;(and (cl-fad:directory-pathname-p pathname)
+				      ;;(cl-fad:directory-exists-p pathname)
+				;;	      t
+				         (cl-fad:directory-exists-p pathname)
+					 (string= name ".")
+					 (string= name "..")))))
     handle))
 
 (defun make-dhandle (dhandle name)
@@ -149,7 +152,9 @@ be a string naming the mount-point that is exported by NFS."
     (delete-file (handle-pathname handle))))
 
 (defun file-size (handle)
-  (unless (handle-directory-p handle)
+  (unless (or (handle-directory-p handle) 
+	      (string= (pathname-name (handle-pathname handle)) ".")
+	      (string= (pathname-name (handle-pathname handle)) ".."))
     (with-open-file (f (handle-pathname handle) :direction :input 
 		       :element-type '(unsigned-byte 8))
       (file-length f))))

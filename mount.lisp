@@ -161,6 +161,15 @@
 			  (push (group-node-name groups) glist))))
 	    elist))))
 
-;;(defhandler %handle-export (void 5)
-;;  (declare (ignore void))
-;;  nil)
+(defhandler %handle-export (void 5)
+  (declare (ignore void))
+  (let ((export-paths (mapcar #'nefarious::provider-path nefarious::*providers*)))
+    (when export-paths
+      (do ((ex nil)
+	   (epaths export-paths (cdr epaths)))
+	  ((null epaths) ex)
+	(let ((e (make-export-node :dir (car epaths))))
+	  (if ex
+	      (setf (export-node-next e) ex
+		    ex e)
+	      (setf ex e)))))))

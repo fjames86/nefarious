@@ -8,14 +8,15 @@
 ;; the rpc server 
 (defvar *server* nil)
 
-(defun start ()
+(defun start (&key (port-mapper t))
   "Start the NFS server."
   (setf *server* (make-rpc-server))
-  (let ((tcp-ports (list pmap:*pmap-port* *nfs-port* nfs.mount:*mount-port*))
-	(udp-ports (list pmap:*pmap-port* *nfs-port* nfs.mount:*mount-port*)))
+  (let ((ports (append (when port-mapper (list port-mapper:*pmap-port*))
+		       (list *nfs-port* nfs.mount:*mount-port*))))
+    (port-mapper:add-all-mappings ports ports)
     (start-rpc-server *server* 
-		      :tcp-ports tcp-ports
-		      :udp-ports udp-ports)))
+		      :tcp-ports ports
+		      :udp-ports ports)))
 
 (defun stop ()
   "Stop the NFS server."
