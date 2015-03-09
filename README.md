@@ -2,12 +2,10 @@
 An NFS client and server in Common Lisp.
 
 ## 1. Introduction
------------------
 
 Nefarious is an NFS implemention (both client and server) in Common Lisp, currently only NFSv3 is supported. 
 
 ## 2. Client
-----------
 
 All the NFS and mount protocol messages are implemented. 
 
@@ -24,7 +22,6 @@ All the NFS and mount protocol messages are implemented.
 ```
 
 ## 2.1 NFS file streams
----------------------
 
 A stream type which reads/writes to remote files, NFS-FILE-STREAM.
 
@@ -37,7 +34,6 @@ A stream type which reads/writes to remote files, NFS-FILE-STREAM.
 ```
 
 ## 3. Server 
------------
 
 The server component is an RPC server which implements the port-mapper, mount and NFS programs. 
 It listens on ports 111, 635 and 2049 (TCP and UDP).
@@ -51,7 +47,6 @@ Run the server using:
 ```
 
 ### 3.1 Providers
---------------
 
 Users should register providers to implement the NFS functionality. Providers are instances 
 of classes which inherit from NFS-PROVIDER. Users should specialize the generic functions 
@@ -60,7 +55,6 @@ See the  simple provider or the examples. It is possible to define providers whi
 a virtual filesystem, the Windows registry etc.
 
 #### 3.1.1 Simple provider
-----------------------
 
 The default provider, SIMPLE-PROVIDER, can be used to export a directory from the local filesystem.
 
@@ -73,7 +67,6 @@ The default provider, SIMPLE-PROVIDER, can be used to export a directory from th
 ```
 
 #### 3.1.2 Registry provider
--------------------------
 
 Windows only. Exports the windows registry as an NFS filesystem. 
 
@@ -86,7 +79,6 @@ Windows only. Exports the windows registry as an NFS filesystem.
 ```
 
 ## 4. License
-------------
 
 Released under the terms of the MIT license.
 
