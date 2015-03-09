@@ -41,9 +41,8 @@
       (nfs-file-stream-open-p stream)
     (setf (nfs-file-stream-open-p stream) nil)))
 
-(defmethod check-if-open ((stream nfs-file-stream))
+(defun check-if-open (stream)
   "Checks if STREAM is open and signals an error otherwise."
-;;  (declare #.*standard-optimize-settings*)
   (unless (open-stream-p stream)
     (error "stream closed")))
 

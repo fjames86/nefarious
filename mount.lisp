@@ -4,7 +4,7 @@
 ;;; The mount protocol
 
 (defpackage #:nefarious.mount
-  (:use #:cl #:frpc #:nefarious)
+  (:use #:cl #:frpc)
   (:nicknames #:nfs.mount)
   (:export #:call-null
 	   #:call-mount
@@ -74,12 +74,12 @@
 
 (defhandler %handle-mount (dpath 1)
   "Find the exported directory with the export name DPATH and return its handle and authentication flavours."
-  (let ((provider (find-provider dpath)))
+  (let ((provider (nefarious:find-provider dpath)))
     (cond 
       (provider
-       (let ((dhandle (nfs-provider-mount provider *rpc-remote-host*)))
+       (let ((dhandle (nefarious:nfs-provider-mount provider *rpc-remote-host*)))
 	 (make-xunion :ok
-		      (list (provider-handle-fh provider dhandle)
+		      (list (nefarious:provider-handle-fh provider dhandle)
 			    '(:auth-null)))))
       (t 
        ;; no provider registered on that path
@@ -117,10 +117,10 @@
 ;; FIXME: when we support keeping a list of mounted clients we should 
 ;; remove the client from this list 
 (defhandler %handle-unmount (dpath 3)
-  (let ((provider (find-provider dpath)))
+  (let ((provider (nefarious:find-provider dpath)))
     (cond
       (provider
-       (nfs-provider-unmount provider *rpc-remote-host*)
+       (nefarious:nfs-provider-unmount provider *rpc-remote-host*)
        nil)
       (t 
        nil))))
