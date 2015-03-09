@@ -452,13 +452,18 @@
 (defmethod nfs-provider-attrs ((provider registry-provider) fh)
   (let ((rhandle (find-rhandle provider fh)))
     (if rhandle
-	(let ((name (rhandle-name rhandle)))
+	(let* ((name (rhandle-name rhandle))
+	       (size (when name 
+		       (length 
+			(reg-get-value (rhandle-tree rhandle)
+				       (rhandle-name rhandle)
+				       (rhandle-key rhandle))))))
 	  (make-fattr3 :type (if name :reg :dir)
 		       :mode 0
 		       :uid 0
 		       :gid 0
-		       :size (if name 1024 0)
-		       :used (if name 1024 0)
+		       :size (if name size 0)
+		       :used (if name size 0)
 		       :fileid 0
 		       :atime (make-nfs-time3)
 		       :mtime (make-nfs-time3)
@@ -497,9 +502,11 @@
   (let ((handle (find-rhandle provider fh)))
     (if (and handle (rhandle-name handle))
 	(handler-case 
-	    (reg-get-value (rhandle-tree handle)
-			   (rhandle-name handle)
-			   (rhandle-key handle))
+	    (let ((bytes 
+		   (reg-get-value (rhandle-tree handle)
+				  (rhandle-name handle)
+				  (rhandle-key handle))))
+	      (subseq bytes offset))
 	  (error (e)
 	    (log:debug "~A" e)
 	    (error 'nfs-error :stat :noent)))

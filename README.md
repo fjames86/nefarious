@@ -87,7 +87,7 @@ The default provider, SIMPLE-PROVIDER, can be used to export a directory from th
 4.1.2 Registry provider
 -------------------------
 
-Windows only. Exports the windows registry as an NFS filesystem. Requires the CL-REGISTRY package.
+Windows only. Exports the windows registry as an NFS filesystem. 
 
 ```
 ;; export the HKEY_LOCAL_MACHINE hive as "/reg"
