@@ -78,7 +78,14 @@ Windows only. Exports the windows registry as an NFS filesystem.
 (register-provider (nfs.registry:make-registry-provider :local-machine "SOFTWARE") "/hklm/software")
 ```
 
-## 4. License
+## 4. Notes
+
+Nefarious is based on [frpc](https://github.com/fjames86/frpc), the underlying ONCRPC implementation.
+
+The primary purpose of both projects is to get something simple which works, rather than a high-performance, professional
+product. At best, it should be considered an educational project which could be used to form the basis of something better.
+
+## 5. License
 
 Released under the terms of the MIT license.
 

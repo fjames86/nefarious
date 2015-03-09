@@ -19,7 +19,8 @@
     (cond
       (old
        (warn "Replacing provider registered on path ~A." (provider-path provider))
-       (setf *providers* (substitute provider old *providers*)))
+       (setf (provider-id provider) (provider-id old)
+	     *providers* (substitute provider old *providers*)))
       (t 
        (push provider *providers*))))
   provider)
