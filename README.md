@@ -3,7 +3,13 @@ An NFS client and server in Common Lisp.
 
 ## 1. Introduction
 
-Nefarious is an NFS implemention (both client and server) in Common Lisp, currently only NFSv3 is supported. 
+Nefarious is an NFS implemention (both client and server) in Common Lisp. Currently only NFSv3 is supported. 
+
+The Nefarious client has been used successfully with the [FreeNFS](http://sourceforge.net/projects/freenfs/) on Windows 8.1.
+
+The Nefarious server has been successfully mounted with [nekodrive](https://code.google.com/p/nekodrive/) and 
+the NFS client that comes with Ubuntu Linux.
+
 
 ## 2. Client
 
@@ -84,6 +90,9 @@ Nefarious is based on [frpc](https://github.com/fjames86/frpc), the underlying O
 
 The primary purpose of both projects is to get something simple which works, rather than a high-performance, professional
 product. At best, it should be considered an educational project which could be used to form the basis of something better.
+Please do not expect high performance or a bug-free experience, although it would be nice to have both eventually.
+
+The NFS lock protocol needs to be implemented.
 
 ## 5. License
 
