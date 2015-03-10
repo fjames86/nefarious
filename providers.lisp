@@ -47,8 +47,10 @@
 
 (defun fh-provider-handle (fh)
   "Convert an external NFS handle to an internal provider handle."
-  (destructuring-bind (id handle) (unpack #'read-provider-fh fh)
-    (list (find-provider id) handle)))
+  (handler-case 
+      (destructuring-bind (id handle) (unpack #'read-provider-fh fh)
+	(list (find-provider id) handle))
+    (error () '(nil nil))))
 
 (defun provider-handle-fh (provider handle)
   "Convert an internal provider handle into an external NFS handle."
