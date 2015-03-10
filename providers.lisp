@@ -10,8 +10,10 @@
 (defparameter *providers* nil)
 
 (defclass nfs-provider ()
-  ((id :initform (prog1 *provider-id* (incf *provider-id*)) :reader provider-id)
-   (path :initform "/" :initarg :path :accessor provider-path)))
+  ((id :initform (prog1 *provider-id* (incf *provider-id*)) :accessor provider-id)
+   (path :initform "/" :initarg :path :accessor provider-path)
+   (clients :initform nil :accessor provider-clients)))
+
 
 (defun register-provider (provider export-path)
   (setf (provider-path provider) export-path)

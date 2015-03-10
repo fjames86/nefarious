@@ -63,6 +63,9 @@
 	  #:find-provider
 	  #:provider-handle-fh
 	  #:fh-provider-handle
+	  #:provider-clients
+	  #:provider-path
+	  #:provider-id
 
 	  ;; provider generic functions
 	  #:nfs-provider-mount

@@ -440,14 +440,9 @@
 ;; ------------------------------------------
 ;; for the mount protocol
 (defmethod nfs-provider-mount ((provider registry-provider) client)
-  (pushnew client (simple-provider-clients provider) 
-	   :test #'equalp)
   (rhandle-fh (simple-provider-mount-handle provider)))
 
 (defmethod nfs-provider-unmount ((provider registry-provider) client)
-  (setf (simple-provider-clients provider)
-	(remove client (simple-provider-clients provider)
-		:test #'equalp))
   nil)
 
 ;; for nfs

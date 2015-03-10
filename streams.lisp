@@ -17,14 +17,52 @@
            :accessor nfs-file-stream-open-p
            :documentation "For CMUCL we have to keep track of this manually.")
    (fh :initform nil :initarg :fh :reader nfs-file-stream-fh)
-   (position :initform 0 :accessor nfs-file-stream-position)
+   (position :initform 0 
+	     :accessor nfs-file-stream-position
+	     :documentation "Stores the current position in the remote file.")
    (end-p :initform nil :accessor nfs-file-stream-end-p)
-   (buffer-size :initform +default-stream-buffer-size+ :initarg :buffer-size :reader nfs-file-stream-buffer-size)
-   (buffer :initform (make-array +default-stream-buffer-size+ :element-type '(unsigned-byte))
-	   :initarg :buffer :reader nfs-file-stream-buffer)   
-   (buffer-pos :initform 0 :accessor nfs-file-stream-buffer-pos)   
+   (max-buffer-size :initform +default-stream-buffer-size+ :initarg :max-buffer-size :reader nfs-file-stream-max-buffer-size)
+   (buffer-size :initform 0 :initarg :buffer-size :accessor nfs-file-stream-buffer-size
+		:documentation "Stores the count of the valid bytes in the buffer, could be less than the maximium size.")
+   (buffer-pos :initform 0 :accessor nfs-file-stream-buffer-pos
+	       :documentation "Stores the current position in the buffer that should next be accessed.")
+   (buffer :initform nil :initarg :buffer :reader nfs-file-stream-buffer)
    (attrs :initarg :attrs :accessor nfs-file-stream-attrs)
    (call-args :initform nil :initarg :call-args :reader nfs-file-stream-call-args)))
+
+(defun fill-buffer (stream)
+  "Read from the file into the local buffer."
+  (declare (type nfs-file-stream stream))
+  (multiple-value-bind (data eof attrs)
+      (apply #'call-read 
+	     (nfs-file-stream-fh stream)
+	     (nfs-file-stream-position stream)
+	     (nfs-file-stream-max-buffer-size stream)
+	     (nfs-file-stream-call-args stream))
+    (let ((count (length data)))
+      (dotimes (i count)
+	(setf (aref (nfs-file-stream-buffer stream) i)
+	      (aref data i)))
+      (setf (nfs-file-stream-buffer-pos stream) 0
+	    (nfs-file-stream-buffer-size stream) count
+	    (nfs-file-stream-end-p stream) eof
+	    (nfs-file-stream-attrs stream) attrs)
+      (incf (nfs-file-stream-position stream) count)))
+  nil)
+
+(defun flush-buffer (stream)
+  "Write the contents of the local buffer out to the file."
+  (apply #'call-write
+	 (nfs-file-stream-fh stream)
+	 (nfs-file-stream-position stream)
+	 (if (= (nfs-file-stream-buffer-size stream) (nfs-file-stream-max-buffer-size stream))
+	     (nfs-file-stream-buffer stream)
+	     (subseq (nfs-file-stream-buffer stream) 0 (nfs-file-stream-buffer-size stream)))
+	 (nfs-file-stream-call-args stream))
+  (incf (nfs-file-stream-position stream) (nfs-file-stream-buffer-pos stream))
+  (setf (nfs-file-stream-buffer-pos stream) 0
+	(nfs-file-stream-buffer-size stream) 0)
+  nil)
 
 #+:cmu
 (defmethod open-stream-p ((stream nfs-file-stream))
@@ -64,7 +102,6 @@
 
 (defmethod (setf stream-file-position) (position-spec (stream nfs-file-stream))
   "Sets the index into the underlying vector if POSITION-SPEC is acceptable."
-;;  (declare #.*standard-optimize-settings*)
   (setf (nfs-file-stream-position stream)
 	(case position-spec
 	  (:start 0)
@@ -75,61 +112,82 @@
 	   position-spec)))
   (nfs-file-stream-position stream))
 
-
-
-
-
 (defmethod stream-read-sequence ((stream nfs-file-stream) sequence start end &key)
-;;  (declare #.*standard-optimize-settings*)
+  "Returns the index of last byte read."
   (declare (fixnum start end))
   (let ((count (- end start)))
-    (multiple-value-bind (bytes eof attrs) 
-	   (apply #'call-read 
-		  (nfs-file-stream-fh stream) 
-		  (nfs-file-stream-position stream)
-		  count
-		  (nfs-file-stream-call-args stream))
-      ;; update the attrs for the file
-      (setf (nfs-file-stream-attrs stream) attrs)
-      ;; check whether it's at the end
-      (when eof (setf (nfs-file-stream-end-p stream) t))
-      ;; copy the bytes into the sequence
-      (let ((length (length bytes)))
-	(do ((i 0 (1+ i)))
-	    ((= i (min length count)) 
-	     (nfs-file-stream-position stream))
-	  (setf (elt sequence (+ i start)) (aref bytes i))
-	  (incf (nfs-file-stream-position stream)))))))
-  
+    (do ((offset start))
+	((zerop count) offset)
+      ;; copy from buffer-pos to buffer-size bytes into sequence
+      (do ((i (nfs-file-stream-buffer-pos stream) (1+ i)))
+	  ((= i (nfs-file-stream-buffer-size stream)))
+	(setf (elt sequence (+ offset i))
+	      (aref (nfs-file-stream-buffer stream) i)))
+      (incf offset (- (nfs-file-stream-buffer-size stream)
+		      (nfs-file-stream-buffer-pos stream)))
+      (decf count (- (nfs-file-stream-buffer-size stream)
+		      (nfs-file-stream-buffer-pos stream)))
+      
+      ;; when we're at the end of the file just set the count to zero to exit 
+      ;; otherwise refill the buffer 
+      (if (nfs-file-stream-end-p stream)
+	  (setf count 0)
+	  (fill-buffer stream)))))
+        
 (defmethod stream-write-sequence ((stream nfs-file-stream) sequence start end &key)
-  (apply #'call-write
-	 (nfs-file-stream-fh stream)
-	 (nfs-file-stream-position stream)
-	 (subseq sequence start end)
-	 (nfs-file-stream-call-args stream))
-  ;; increase the file position
-  (incf (nfs-file-stream-position stream) (- end start))
-  sequence)
-
+  "Returns the index of last byte written."
+  (do ((count (- end start))
+       (offset start))
+      ((= count 0) offset)
+    ;; write bytes into the local buffer then flush it 
+    (do ((i (nfs-file-stream-buffer-pos stream) (1+ i)))
+	((= i (nfs-file-stream-max-buffer-size stream)))
+      (setf (aref (nfs-file-stream-buffer stream) i)
+	    (elt sequence (+ offset i))))
+    (incf offset (- (nfs-file-stream-max-buffer-size stream)
+		    (nfs-file-stream-buffer-pos stream)))
+    (decf count (- (nfs-file-stream-max-buffer-size stream)
+		    (nfs-file-stream-buffer-pos stream)))
+    (flush-buffer stream)))
 
 ;; to support read-byte and write-byte we need to have some form of buffering
 ;; otherwise each operation would involve an rpc call -- very expensive!
 ;; we can just use the read/write sequence methods
 (defmethod stream-read-byte ((stream nfs-file-stream))
   "Returns the byte or :EOF"
-  :eof)
+  ;; if the buffer has been completely read then refill it 
+  (when (= (nfs-file-stream-buffer-pos stream)
+	   (nfs-file-stream-buffer-size stream))
+    (fill-buffer stream))
 
+  (cond 
+    ((and (= (nfs-file-stream-buffer-pos stream)
+	     (nfs-file-stream-buffer-size stream))
+	  (nfs-file-stream-end-p stream))
+     :eof)
+    (t 
+     (let ((byte (aref (nfs-file-stream-buffer stream)
+		       (nfs-file-stream-buffer-pos stream))))
+       (incf (nfs-file-stream-buffer-pos stream))
+       byte))))
+  
 (defmethod stream-write-byte ((stream nfs-file-stream) byte)
-  "write the byte"
-  nil)
-
-
+  "write the byte to the local buffer, flush it if at the end of the buffer"
+  (setf (aref (nfs-file-stream-buffer stream)
+	      (nfs-file-stream-buffer-pos stream))
+	byte)
+  (incf (nfs-file-stream-buffer-pos stream))
+  (incf (nfs-file-stream-buffer-size stream))
+  (when (= (nfs-file-stream-buffer-size stream)
+	   (nfs-file-stream-max-buffer-size stream))
+    (flush-buffer stream)))
+  
 ;; need to implement these if using buffered byte methods
 (defmethod stream-finish-output ((stream nfs-file-stream))
-  nil)
+  (flush-buffer stream))
 
 (defmethod stream-force-output ((stream nfs-file-stream))
-  nil)
+  (flush-buffer stream))
 
 
 ;; -----------------------------------------

@@ -29,10 +29,7 @@
 			      v)
 			:pathname pathname
 			:parent (handle-fh dhandle)
-			:directory-p (or ;;(and (cl-fad:directory-pathname-p pathname)
-				      ;;(cl-fad:directory-exists-p pathname)
-				;;	      t
-				         (cl-fad:directory-exists-p pathname)
+			:directory-p (or (cl-fad:directory-exists-p pathname)
 					 (string= name ".")
 					 (string= name "..")))))
     handle))
@@ -74,12 +71,10 @@
 
 ;; the provider class
 (defclass simple-provider (nfs-provider)
-  ((handles :initform (make-hash-table :test #'equalp) :reader simple-provider-handles)
-   (clients :initform nil :accessor simple-provider-clients)
-   (mount-handle :initarg :mount-handle :reader simple-provider-mount-handle)))
-
-
-
+  ((handles :initform (make-hash-table :test #'equalp) :reader simple-provider-handles
+	    :documentation "Hash-table mapping octet-array NFS handles to handle structures.")
+   (mount-handle :initarg :mount-handle :reader simple-provider-mount-handle
+		 :documentation "The handle for the exported (toplevel) directory.")))
 
 (defun find-handle (provider fh)
   (gethash fh (simple-provider-handles provider)))
@@ -106,7 +101,7 @@ the handles list. Returns the newly allocated handle."
       (return-from allocate-dhandle nil))
     (setf (gethash (handle-fh handle) (simple-provider-handles provider))
 	  handle)
-    (push handle (handle-children dhandle))
+    (push (handle-fh handle) (handle-children dhandle))
     handle))
 
 (defun make-simple-provider (&optional local-path)
@@ -175,14 +170,9 @@ be a string naming the mount-point that is exported by NFS."
 
 ;; for the mount protocol
 (defmethod nfs-provider-mount ((provider simple-provider) client)
-  (pushnew client (simple-provider-clients provider) 
-	   :test #'equalp)
   (handle-fh (simple-provider-mount-handle provider)))
 
 (defmethod nfs-provider-unmount ((provider simple-provider) client)
-  (setf (simple-provider-clients provider)
-	(remove client (simple-provider-clients provider)
-		:test #'equalp))
   nil)
 
 ;; for nfs
@@ -193,7 +183,7 @@ be a string naming the mount-point that is exported by NFS."
 	  (make-fattr3 :type (if (handle-directory-p handle)
 				 :dir
 				 :reg)
-		       :mode 0
+		       :mode #xff ;; FIXME: what should go here?
 		       :uid 0
 		       :gid 0
 		       :size (or size 0)
@@ -226,7 +216,7 @@ be a string naming the mount-point that is exported by NFS."
 	(error 'nfs-error :stat :noent))))
 
 (defmethod nfs-provider-access ((provider simple-provider) handle access)
-  '(:read :lookup :write :modify :extend :delete :execute))
+  '(:read :lookup :modify :extend :delete :execute))
 
 (defmethod nfs-provider-read ((provider simple-provider) fh offset count)
   "Read count bytes from offset from the object."
@@ -242,12 +232,15 @@ be a string naming the mount-point that is exported by NFS."
 	(write-file handle offset bytes)
 	(error 'nfs-error :stat :bad-handle))))
 
-(defmethod nfs-provider-create ((provider simple-provider) dhandle name)
+(defmethod nfs-provider-create ((provider simple-provider) dh name)
   "Create a new file named NAME in directory DHANDLE."
-  (let ((handle (create-file provider dhandle name)))
-    (if handle
-	(handle-fh handle)
-	(error 'nfs-error :stat :noent))))
+  (let ((dhandle (find-handle provider dh)))
+    (if dhandle
+	(let ((handle (create-file provider dhandle name)))
+	  (if handle
+	      (handle-fh handle)
+	      (error 'nfs-error :stat :noent)))
+	(error 'nfs-error :stat :bad-handle))))
 
 (defmethod nfs-provider-remove ((provider simple-provider) dhandle name)
   "Remove the file named HANDLE."

@@ -77,6 +77,9 @@
   (let ((provider (nefarious:find-provider dpath)))
     (cond 
       (provider
+       ;; push the client onto the provider's client list 
+       (pushnew *rpc-remote-host* (nefarious:provider-clients provider) :test #'equalp)
+       ;; get the mount handle 
        (let ((dhandle (nefarious:nfs-provider-mount provider *rpc-remote-host*)))
 	 (make-xunion :ok
 		      (list (nefarious:provider-handle-fh provider dhandle)
@@ -105,9 +108,20 @@
 	((null mount-list) mlist)
       (push (mount-body-mount mount-list) mlist))))
 
-;;(defhandler %handle-dump (void 2)
-;;  (declare (ignore void))
-;;  nil)
+;; return a list of all the mounts of all the clients 
+(defhandler %handle-dump (void 2)
+  (declare (ignore void))
+  (do ((mlist nil)
+       (providers nefarious::*providers* (cdr providers)))
+      ((null providers) mlist)
+    (dolist (client (nefarious:provider-clients (car providers)))
+      (let ((mbody (make-mount-body :mount 
+				    (list :hostname (usocket:vector-quad-to-dotted-quad client)
+					  :directory (nefarious:provider-path (car providers))))))
+	(if mlist
+	    (setf (mount-body-next mlist) mbody
+		  mlist mbody)
+	    (setf mlist mbody))))))
 
 ;; -----------------------------------------------------
 ;; unmount -- remove mount entry 
@@ -120,6 +134,11 @@
   (let ((provider (nefarious:find-provider dpath)))
     (cond
       (provider
+       ;; remove the client from the provider's client list 
+       (setf (nefarious:provider-clients provider)
+	     (remove *rpc-remote-host* (nefarious:provider-clients provider) 
+		     :test #'equalp))
+       ;; tell the provider about it 
        (nefarious:nfs-provider-unmount provider *rpc-remote-host*)
        nil)
       (t 
@@ -163,7 +182,7 @@
 
 (defhandler %handle-export (void 5)
   (declare (ignore void))
-  (let ((export-paths (mapcar #'nefarious::provider-path nefarious::*providers*)))
+  (let ((export-paths (mapcar #'nefarious:provider-path nefarious::*providers*)))
     (when export-paths
       (do ((ex nil)
 	   (epaths export-paths (cdr epaths)))
