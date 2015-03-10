@@ -85,6 +85,7 @@ the handles list. Returns the newly allocated handle."
   (let ((handle (make-handle dhandle name)))
     ;; if the file does not exist then error
     (unless (cl-fad:file-exists-p (handle-pathname handle))
+      (log:debug "file doesn't exist ~S" (handle-pathname handle))
       (return-from allocate-handle nil))
 
     ;; the file exists, push it onto the list and the parent's children list
@@ -124,7 +125,10 @@ be a string naming the mount-point that is exported by NFS."
     (file-position f offset)
     (let ((buffer (nibbles:make-octet-vector count)))
       (let ((n (read-sequence buffer f)))
-	(subseq buffer 0 n)))))
+	(values (if (= n count)
+		    buffer
+		    (subseq buffer 0 n))
+		(not (read-byte f nil nil)))))))
 
 (defun write-file (handle offset buffer)
   (with-open-file (f (handle-pathname handle)
@@ -208,11 +212,14 @@ be a string naming the mount-point that is exported by NFS."
 	     (if ph 
 		 ph
 		 (error 'nfs-error :stat :noent))))
-	  (t 
-	   (let ((handle (allocate-handle provider dhandle name)))
+	  (t 	   
+	   (let ((handle (allocate-dhandle provider dhandle name)))
 	     (if handle
 		 (handle-fh handle)
-		 (error 'nfs-error :stat :noent)))))
+		 (let ((handle2 (allocate-handle provider dhandle name)))
+		   (if handle2 
+		       (handle-fh handle2)
+		       (error 'nfs-error :stat :noent)))))))
 	(error 'nfs-error :stat :noent))))
 
 (defmethod nfs-provider-access ((provider simple-provider) handle access)

@@ -83,7 +83,7 @@ Returns a list of the valid access privileges."))
 ;;(defgeneric nfs-privider-read-link (provider handle))
 
 (defgeneric nfs-provider-read (provider handle offset count)
-  (:documentation "Read count bytes from offset from the object."))
+  (:documentation "Read count bytes from offset from the object. Returns (values bytes eof)."))
 
 (defgeneric nfs-provider-write (provider handle offset bytes)
   (:documentation "Write bytes at offset to the object. Returns the number of bytes written."))

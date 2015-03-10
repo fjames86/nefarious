@@ -212,13 +212,11 @@ of NFS-ACCESS flag symbols. Returns (values post-op-attr access"))
       (cond
 	((and provider (client-mounted-p provider *rpc-remote-host*))
 	 (handler-case 
-	     (let ((bytes (nfs-provider-read provider handle offset count)))
+	     (multiple-value-bind (bytes eof) (nfs-provider-read provider handle offset count)
 	       (make-xunion :ok
 			    (list (nfs-provider-attrs provider handle)
 				  (length bytes)
-				  (if (< (length bytes) count)
-				      t
-				      nil)
+				  eof
 				  bytes)))
 	   (nfs-error (e)
 	     (log:debug "~A" e)

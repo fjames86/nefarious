@@ -509,7 +509,7 @@
 		   (reg-get-value (rhandle-tree handle)
 				  (rhandle-name handle)
 				  (rhandle-key handle))))
-	      (subseq bytes offset))
+	      (values (subseq bytes offset) t))
 	  (error (e)
 	    (log:debug "~A" e)
 	    (error 'nfs-error :stat :noent)))
