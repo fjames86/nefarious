@@ -8,21 +8,15 @@
 ;; -------------------------------------------------------------
 ;; Handles 
 
-;; Q: how to solve the issue of multiple handles with the same parent having
-;; the same hash? This results in them getting the handle fh
-;; A: if we stop caring about generating the same handles each time then we can 
-;; just use an incrementing integer?
-
-
-(defun pack-handle-fh (hash parent-hash)
-  (with-writer (writer (:list :uint64 :uint64))
-    (pack #'writer (list hash parent-hash))))
-(defun unpack-handle-fh (fh)
-  (with-reader (reader (:list :uint64 :uint64))
-    (unpack #'reader fh)))
+(defun pack-fh (id)
+  (let ((v (nibbles:make-octet-vector 4)))
+    (setf (nibbles:ub32ref/be v 0) id)
+    v))
+(defun unpack-fh (fh)
+  (nibbles:ub32ref/be fh 0))
 
 (defstruct (handle (:constructor %make-handle))
-  hash
+  id ;; file-id 
   fh ;; nfs file handle i.e. an octet array
   pathname
   directory-p
@@ -30,15 +24,14 @@
   children ;; nfs handles of children
   )
 
-(defun make-handle (dhandle name)
+(defun make-handle (dhandle name id)
   (declare (type handle dhandle)
 	   (type string name))
   (let* ((pathname (cl-fad:merge-pathnames-as-file (handle-pathname dhandle)
 						   name))
-	 (hash (sxhash pathname))
 	 (handle 
-	  (%make-handle :hash hash
-			:fh (pack-handle-fh hash (handle-hash dhandle))
+	  (%make-handle :id id
+			:fh (pack-fh id)
 			:pathname pathname
 			:parent (handle-fh dhandle)
 			:directory-p (or (cl-fad:directory-exists-p pathname)
@@ -50,7 +43,7 @@
 
     handle))
 
-(defun make-dhandle (dhandle name)
+(defun make-dhandle (dhandle name id)
   (declare (type handle dhandle)
 	   (type string name))
   (let* ((pathname (cl-fad:merge-pathnames-as-directory (handle-pathname dhandle)
@@ -58,10 +51,9 @@
 							  (if (string= lc #\\)
 							      name
 							      (concatenate 'string name "\\")))))
-	 (hash (sxhash pathname))
 	 (handle 
-	  (%make-handle :hash hash
-			:fh (pack-handle-fh hash (handle-hash dhandle))
+	  (%make-handle :id id
+			:fh (pack-fh id)
 			:pathname pathname
 			:parent (handle-fh dhandle)
 			:directory-p (and (cl-fad:directory-pathname-p pathname)
@@ -71,10 +63,9 @@
 
 (defun make-mount-handle (path)
   (let* ((pathname (cl-fad:pathname-as-directory path))
-	 (hash (sxhash pathname))
 	 (handle 
-	  (%make-handle :hash hash
-			:fh (pack-handle-fh hash 0)
+	  (%make-handle :id 0
+			:fh (pack-fh 0)
 			:pathname pathname
 			:directory-p (and (cl-fad:directory-pathname-p pathname)
 					  (cl-fad:directory-exists-p pathname)
@@ -86,42 +77,62 @@
 
 ;; the provider class
 (defclass simple-provider (nfs-provider)
-  ((handles :initform (make-hash-table :test #'equalp) :reader simple-provider-handles
+  ((file-id :initform 1 :accessor simple-provider-id)
+   (handles :initform nil :accessor simple-provider-handles
 	    :documentation "Hash-table mapping octet-array NFS handles to handle structures.")
    (mount-handle :initarg :mount-handle :reader simple-provider-mount-handle
 		 :documentation "The handle for the exported (toplevel) directory.")))
 
+(defun next-provider-id (provider)
+  (let ((id (simple-provider-id provider)))
+    (incf (simple-provider-id provider))
+    id))
+
 (defun find-handle (provider fh)
-  (gethash fh (simple-provider-handles provider)))
+  (find fh (simple-provider-handles provider) :key #'handle-fh :test #'equalp))
+
+(defun lookup-handle (provider dhandle pathname)
+  (find-if (lambda (handle)
+	     (when (cl-fad:pathname-equal (handle-pathname handle) pathname)
+	       (return-from lookup-handle handle)))
+	   (simple-provider-handles provider))
+    nil)
 
 (defun allocate-handle (provider dhandle name)
   "Create an NFS handle for the file named NAME in the directory specified by DHANDLE and store it in 
 the handles list. Returns the newly allocated handle."
-  (let ((handle (make-handle dhandle name)))
+  ;; first, attempt to find the handle. if it's already there then just return it 
+  (let ((h (lookup-handle provider dhandle 
+			  (cl-fad:merge-pathnames-as-file (handle-pathname dhandle) name))))
+    (when h (return-from allocate-handle h)))
+
+  (let ((handle (make-handle dhandle name (next-provider-id provider))))
     ;; if the file does not exist then error
     (unless (cl-fad:file-exists-p (handle-pathname handle))
       (log:debug "file doesn't exist ~S" (handle-pathname handle))
       (return-from allocate-handle nil))
 
-    ;; unless it's already been defined, add it
-    (unless (find-handle provider (handle-fh handle))
-      (setf (gethash (handle-fh handle)
-		     (simple-provider-handles provider))
-	    handle)
-      (push (handle-fh handle) (handle-children dhandle)))
+    (push handle (simple-provider-handles provider))
+    (push (handle-fh handle) (handle-children dhandle))
 
     handle))
 
 (defun allocate-dhandle (provider dhandle name)
-  (let ((handle (make-dhandle dhandle name)))
+
+  (let ((lc (char name (1- (length name)))))
+    (unless (string= lc #\\)
+      (setf name (concatenate 'string name "\\"))))
+
+  (let ((h (lookup-handle provider dhandle 
+			  (cl-fad:merge-pathnames-as-directory (handle-pathname dhandle) name))))
+    (when h (return-from allocate-dhandle h)))
+
+  (let ((handle (make-dhandle dhandle name (next-provider-id provider))))
     (unless (cl-fad:directory-exists-p (handle-pathname handle))
       (return-from allocate-dhandle nil))
 
-    (unless (find-handle provider (handle-fh handle))
-      (setf (gethash (handle-fh handle)
-		     (simple-provider-handles provider))
-	    handle)
-      (push (handle-fh handle) (handle-children dhandle)))
+    (push handle (simple-provider-handles provider))
+    (push (handle-fh handle) (handle-children dhandle))
 
     handle))
 
@@ -131,8 +142,7 @@ be a string naming the mount-point that is exported by NFS."
   (let ((handle (make-mount-handle (or local-path *default-pathname-defaults*))))
     (let ((provider (make-instance 'simple-provider
 				   :mount-handle handle)))
-      (setf (gethash (handle-fh handle) (simple-provider-handles provider))
-	    handle)
+      (push handle (simple-provider-handles provider))
       provider)))
 
 ;; ----------- file operations -------------------
@@ -159,15 +169,15 @@ be a string naming the mount-point that is exported by NFS."
     (length (write-sequence buffer f))))
 
 (defun create-file (provider dhandle name)
-  (let ((handle (make-handle dhandle name)))
+  (let ((handle (make-handle dhandle name (next-provider-id provider))))
     (with-open-file (f (handle-pathname handle)
 		       :direction :output 
 		       :if-exists :error
 		       :if-does-not-exist :create)))
   (allocate-handle provider dhandle name))
 
-(defun remove-file (dhandle name)
-  (let ((handle (make-handle dhandle name)))
+(defun remove-file (provider dhandle name)
+  (let ((handle (make-handle dhandle name (next-provider-id provider))))
     (delete-file (handle-pathname handle))))
 
 (defun file-size (handle)
@@ -184,8 +194,8 @@ be a string naming the mount-point that is exported by NFS."
       (ensure-directories-exist (handle-pathname handle))
       handle)))
 
-(defun remove-directory (dhandle name)
-  (let ((handle (make-dhandle dhandle name)))    
+(defun remove-directory (provider dhandle name)
+  (let ((handle (make-dhandle dhandle name (next-provider-id provider))))
     (cl-fad:delete-directory-and-files (handle-pathname handle))))
 
 ;; ---------------------------------------------------------------
@@ -277,7 +287,7 @@ be a string naming the mount-point that is exported by NFS."
   "Remove the file named HANDLE."
   (let ((dhandle (find-handle provider dhandle)))
     (if dhandle	
-	(remove-file dhandle name)	  
+	(remove-file provider dhandle name)	  
 	(error 'nfs-error :stat :bad-handle))))
 
 (defmethod nfs-provider-rename ((provider simple-provider) fdh fname tdh tname)
@@ -285,8 +295,8 @@ be a string naming the mount-point that is exported by NFS."
   (let ((fdhandle (find-handle provider fdh))
 	(tdhandle (find-handle provider tdh)))
     (if (and fdhandle tdhandle)
-	(let ((fpath (handle-pathname (make-handle fdhandle fname)))
-	      (tpath (handle-pathname (make-handle tdhandle tname))))
+	(let ((fpath (handle-pathname (make-handle fdhandle fname (next-provider-id provider))))
+	      (tpath (handle-pathname (make-handle tdhandle tname (next-provider-id provider)))))
 	  (rename-file fpath tpath)
 	  nil)
 	(error 'nfs-error :stat :bad-handle))))
@@ -327,7 +337,7 @@ be a string naming the mount-point that is exported by NFS."
     (let ((dhandle (find-handle provider dh)))
       (if dhandle
 	  (progn
-	    (remove-directory dhandle name)
+	    (remove-directory provider dhandle name)
 	    nil)
 	  (error 'nfs-error :stat :bad-handle))))
 
