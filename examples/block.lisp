@@ -207,3 +207,25 @@ typedef enum _MEDIA_TYPE {
   (bytes :pointer)
   (overlapped :pointer))
 
+
+
+
+;; -------------------
+
+;; a logical volume is a list of extents
+;; an extent is a region of disk (number of sectors)
+;; 
+
+
+;; FIXME: make these xstructs so we can store the metadata on disk
+
+(defstruct extent 
+  start count)
+
+(defun merge-extents (extents)
+  (make-extent :start (extent-start (car extents))
+	       :count (reduce #'+ extents :key #'extent-count)))
+
+(defstruct volume 
+  name id extents)
+
