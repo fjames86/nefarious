@@ -33,6 +33,7 @@
 (defxtype* netobj () (:varray* :octet +max-netobj+))
 
 (use-rpc-program +nlm4-program+ +nlm4-version+)
+(use-rpc-port nefarious::*nfs-port*)
 
 (defxenum nlm4-stats 
   ((:granted 0)
@@ -130,6 +131,10 @@
 ;; ----------------
 
 (defrpc call-null 0 :void :void)
+(defhandler %handle-null (void 0)
+  (declare (ignore void))
+  nil)
+
 (defrpc call-test 1 nlm4-test-args ntlm-test-res)
 (defrpc call-lock 2 nlm4-lock-args nlm4-res)
 (defrpc call-cancel 3 nlm4-cancel-args nlm4-res)

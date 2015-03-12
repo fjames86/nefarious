@@ -213,7 +213,9 @@ be a string naming the mount-point that is exported by NFS."
 (defmethod nfs-provider-attrs ((provider simple-provider) fh)
   (let ((handle (find-handle provider fh)))
     (if handle
-	(let ((size (file-size handle)))
+	(let ((size (file-size handle))
+	      (time (- (file-write-date (handle-pathname handle))
+		       #.(encode-universal-time 0 0 0 1 1 1970))))
 	  (make-fattr3 :type (if (handle-directory-p handle)
 				 :dir
 				 :reg)
@@ -223,9 +225,9 @@ be a string naming the mount-point that is exported by NFS."
 		       :size (or size 0)
 		       :used (or size 0)
 		       :fileid 0
-		       :atime (make-nfs-time3)
-		       :mtime (make-nfs-time3)
-		       :ctime (make-nfs-time3)))
+		       :atime (make-nfs-time3 :seconds time)
+		       :mtime (make-nfs-time3 :seconds time)
+		       :ctime (make-nfs-time3 :seconds time)))
 	(error 'nfs-error :stat :bad-handle))))
 
 ;; don't support this

@@ -115,6 +115,7 @@
 
 (defxtype* pre-op-attr () (:optional wcc-attr))
 
+;; weak cache consistency data.
 (defxstruct wcc-data ()
   ((before pre-op-attr)
    (after post-op-attr)))
