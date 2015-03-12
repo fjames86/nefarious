@@ -1,7 +1,7 @@
 
 
 (defpackage #:nefarious.block
-  (:use #:cl #:cffi)
+  (:use #:cl #:frpc #:nefarious #:cffi)
   (:nicknames #:nfs.block))
 
 (in-package #:nefarious.block)
@@ -115,8 +115,8 @@
   (sectors-per-track :uint32)
   (bytes-per-sector :uint32))
 
-(defstruct disk-geometry 
-  cylinders media-type tracks sectors bytes)
+(defstruct geometry 
+  cylinders media-type tracks sectors bytes size)
 
 ;; IOCTL_DISK_GET_DRIVE_GEOMETRY == #x70000
 (defun get-disk-geometry (path)
@@ -134,17 +134,22 @@
                                           bytes
                                           (null-pointer))))
              (if res
-                 (let ((g (make-disk-geometry)))
-                   (setf (disk-geometry-cylinders g)
+                 (let ((g (make-geometry)))
+                   (setf (geometry-cylinders g)
                          (foreign-slot-value geo '(:struct %disk-geometry) 'cylinders)
-                         (disk-geometry-media-type g) 
+                         (geometry-media-type g) 
                          (foreign-slot-value geo '(:struct %disk-geometry) 'media-type)
-                         (disk-geometry-tracks g)
+                         (geometry-tracks g)
                          (foreign-slot-value geo '(:struct %disk-geometry) 'tracks-per-cylinder)
-                         (disk-geometry-sectors g)
+                         (geometry-sectors g)
                          (foreign-slot-value geo '(:struct %disk-geometry) 'sectors-per-track)
-                         (disk-geometry-bytes g)
-                         (foreign-slot-value geo '(:struct %disk-geometry) 'bytes-per-sector))
+                         (geometry-bytes g)
+                         (foreign-slot-value geo '(:struct %disk-geometry) 'bytes-per-sector)
+			 (geometry-size g)
+			 (* (geometry-cylinders g)
+			    (geometry-tracks g)
+			    (geometry-sectors g)
+			    (geometry-bytes g)))
                    g)
                  (get-last-error))))
     (close-handle handle))))
@@ -184,6 +189,15 @@ typedef enum _MEDIA_TYPE {
 
 
 
+
+(defcstruct overlapped 
+  (internal :pointer)
+  (internal-high :pointer)
+  (offset :uint32)
+  (offset-high :uint32)
+  (handle :pointer))
+
+
 (defcfun (%write-file "WriteFile" :convention :stdcall)
     :boolean
   (handle :pointer)
@@ -192,12 +206,34 @@ typedef enum _MEDIA_TYPE {
   (bytes :pointer)
   (overlapped :pointer))
 
-(defcstruct overlapped 
-  (internal :pointer)
-  (internal-high :pointer)
-  (offset :uint32)
-  (offset-high :uint32)
-  (handle :pointer))
+(defun split-offset (offset)
+  (values (logand offset #xffffffff)
+	  (ash offset -32)))
+
+(defun write-file (handle offset sequence &key (start 0) end)
+  (let ((length (length sequence)))
+    (with-foreign-objects ((buffer :uint8 length)
+			   (nbytes :uint32)
+			   (overlapped '(:struct overlapped)))
+      (do ((i start (1+ i)))
+	  ((= i (or end length)))
+	(setf (mem-aref buffer :uint8 (- i start))
+	      (elt sequence i)))
+      (multiple-value-bind (offset-low offset-high) (split-offset offset)
+	(setf (foreign-slot-value overlapped '(:struct overlapped)
+				  'offset)
+	      offset-low
+	      (foreign-slot-value overlapped '(:struct overlapped)
+				  'offset-high)
+	      offset-high))
+      (let ((res (%write-file handle 
+			      buffer
+			      length
+			      nbytes
+			      overlapped)))
+	(if res
+	    nil
+	    (get-last-error))))))
 
 (defcfun (%read-file "ReadFile" :convention :stdcall)
     :boolean
@@ -207,25 +243,163 @@ typedef enum _MEDIA_TYPE {
   (bytes :pointer)
   (overlapped :pointer))
 
+(defun read-file (handle sequence offset count &key (start 0) end)
+  (with-foreign-objects ((buffer :uint8 count)
+			 (nbytes :uint32)
+			 (overlapped '(:struct overlapped)))
+    (multiple-value-bind (offset-low offset-high) (split-offset offset)
+      (setf (foreign-slot-value overlapped '(:struct overlapped)
+				'offset)
+	    offset-low
+	    (foreign-slot-value overlapped '(:struct overlapped)
+				'offset-high)
+	    offset-high))
+    (let ((res (%read-file handle 
+			   buffer
+			   count 
+			   nbytes
+			   overlapped)))
+      (cond
+	(res
+	 (do ((i start (1+ i)))
+	     ((= i (or end (+ start count))) (mem-ref nbytes :uint32))
+	  (setf (elt sequence i)
+		(mem-aref buffer :uint8 (- i start)))))
+	(t 
+	 (get-last-error))))))
 
 
 
-;; -------------------
-
-;; a logical volume is a list of extents
-;; an extent is a region of disk (number of sectors)
-;; 
+;; ---------------------
 
 
-;; FIXME: make these xstructs so we can store the metadata on disk
+(defclass block-provider (nfs-provider)
+  ((handle :initarg :handle :reader block-handle)
+   (geometry :initarg :geometry :reader block-geometry)
+   (mount-fh :initform #(0 0 0 0) :reader block-mount-fh)
+   (dev-name :initform "dev0" :reader block-dev-name)
+   (dev-fh :initform #(0 0 0 1) :reader block-dev-fh)))
 
-(defstruct extent 
-  start count)
+(defun make-block-provider (device-path)
+  (let ((handle (create-file device-path)))
+    (make-instance 'block-provider 
+		   :handle handle
+		   :geometry (get-disk-geometry device-path))))
 
-(defun merge-extents (extents)
-  (make-extent :start (extent-start (car extents))
-	       :count (reduce #'+ extents :key #'extent-count)))
+(defun close-block-provider (provider)
+  (close-handle (block-handle provider)))
 
-(defstruct volume 
-  name id extents)
 
+;; for the mount protocol
+(defmethod nfs-provider-mount ((provider block-provider) client)
+  (block-mount-fh provider))
+
+(defmethod nfs-provider-unmount ((provider block-provider) client)
+  nil)
+
+;; for nfs
+(defmethod nfs-provider-attrs ((provider block-provider) fh)
+  (cond
+    ((equalp fh (block-mount-fh provider))
+     (make-fattr3 :type :dir
+		  :mode #xff
+		  :uid 0
+		  :gid 0
+		  :size 0
+		  :used 0
+		  :fileid 0
+		  :atime (make-nfs-time3)
+		  :mtime (make-nfs-time3)
+		  :ctime (make-nfs-time3)))
+    ((equalp fh (block-dev-fh provider))
+     (make-fattr3 :type :blk
+		  :mode #xff
+		  :uid 0
+		  :gid 0
+		  :size (geometry-size (block-geometry provider))
+		  :used (geometry-size (block-geometry provider))
+		  :fileid 0
+		  :atime (make-nfs-time3)
+		  :mtime (make-nfs-time3)
+		  :ctime (make-nfs-time3)))
+    (t 
+     (error 'nfs-error :stat :bad-handle))))
+
+;; don't support this
+;;(defmethod (setf nfs-provider-attrs) (value (provider simple-provider) handle)
+;;  nil)
+
+(defmethod nfs-provider-lookup ((provider block-provider) dh name)
+  (cond
+    ((equalp dh (block-mount-fh provider))
+     (if (string= name (block-dev-name provider))
+	 (block-dev-fh provider)
+	 (error 'nfs-error :stat :noent)))
+    (t 
+     (error 'nfs-error :stat :bad-handle))))
+
+(defmethod nfs-provider-read ((provider block-provider) fh offset count)
+  "Read count bytes from offset from the object."
+  (unless (equalp fh (block-dev-fh fh))
+    (error 'nfs-error :stat :bad-handle))
+  (let ((buffer (nibbles:make-octet-vector count)))
+    (read-file (block-handle provider)
+	       buffer
+	       offset 
+	       count)
+    buffer))
+
+(defmethod nfs-provider-write ((provider block-provider) fh offset bytes)
+  "Write bytes at offset to the object. Returns the number of bytes written."
+  (unless (equalp fh (block-dev-fh provider))
+    (error 'nfs-error :stat :bad-handle))
+  (write-file (block-handle provider)
+	      offset 
+	      bytes))
+
+(defmethod nfs-provider-read-dir ((provider block-provider) dh)
+  "Returns a list of all object (file and directory) names in the directory."
+  (unless (equalp dh (block-mount-fh provider))
+    (error 'nfs-error :stat :bad-handle))
+  (list (block-dev-name provider)))
+
+;; filesystem information
+(defmethod nfs-provider-fs-info ((provider block-provider))
+  "Returns dynamic filesystem information, in an FS-INFO structure."
+  (make-fs-info :attrs nil ;; attributes of the file 
+		:rtmax 1024 ;; maximum read request count
+		:rtpref 1024 ;; preferred read count -- should be same as rtmax
+		:rtmult 4 ;; suggested multiple for read requests
+		:wtmax 1024 ;; maximum write request count 
+		:wtpref 1024 ;; preferred write count
+		:wtmult 4 ;; suggested multiple for writes
+		:dtpref #xffffffff ;; preferred size for read-dir
+		:max-fsize 1024 ;; maximum file size
+		:time-delta (make-nfs-time3 :seconds 1)
+		:properties (enum 'nefarious::nfs-info :homogenous)))
+
+(defmethod nfs-provider-fs-stat ((provider block-provider))
+  "Returns static filesystem information, in an FS-STAT structure."
+  (make-fs-stat :attrs nil ;; fileattribvutes
+		:tbytes #xffffffff ;; total size of the filesystem
+		:fbytes #xffffffff ;; free bytes
+		:abytes #xffffffff ;; available bytes
+		:tfiles #xffffffff ;; total file slots
+		:ffiles #xffffffff ;; total number of free file slots
+		:afiles #xffffffff ;; available file slots
+		:invarsec 1))
+
+(defmethod nfs-provider-path-conf ((provider block-provider))
+  "Returns a PATH-CONF structure containing information about the filesystem."
+  (make-path-conf :attr nil ;; file attributes
+		  :link-max 0 ;; max link size
+		  :link-max 0 ;; maximum number of hard links to an object
+		  :name-max 255 ;; maximum file name
+		  :no-trunc t ;; if T the server will reject any request with a name longer than 
+		  :chown-restricted t ;; will reject any attempt to chown
+		  :case-insensitive t ;; case insensitive filesystem
+		  :case-preserving t))
+
+
+
+		   

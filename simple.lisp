@@ -91,7 +91,7 @@
 (defun find-handle (provider fh)
   (find fh (simple-provider-handles provider) :key #'handle-fh :test #'equalp))
 
-(defun lookup-handle (provider dhandle pathname)
+(defun lookup-handle (provider pathname)
   (find-if (lambda (handle)
 	     (when (cl-fad:pathname-equal (handle-pathname handle) pathname)
 	       (return-from lookup-handle handle)))
@@ -102,7 +102,7 @@
   "Create an NFS handle for the file named NAME in the directory specified by DHANDLE and store it in 
 the handles list. Returns the newly allocated handle."
   ;; first, attempt to find the handle. if it's already there then just return it 
-  (let ((h (lookup-handle provider dhandle 
+  (let ((h (lookup-handle provider
 			  (cl-fad:merge-pathnames-as-file (handle-pathname dhandle) name))))
     (when h (return-from allocate-handle h)))
 
@@ -123,7 +123,7 @@ the handles list. Returns the newly allocated handle."
     (unless (string= lc #\\)
       (setf name (concatenate 'string name "\\"))))
 
-  (let ((h (lookup-handle provider dhandle 
+  (let ((h (lookup-handle provider
 			  (cl-fad:merge-pathnames-as-directory (handle-pathname dhandle) name))))
     (when h (return-from allocate-dhandle h)))
 
