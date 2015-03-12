@@ -48,9 +48,9 @@
 	   (type string name))
   (let* ((pathname (cl-fad:merge-pathnames-as-directory (handle-pathname dhandle)
 							(let ((lc (char name (1- (length name)))))
-							  (if (string= lc #\\)
+							  (if (string= lc #\/)
 							      name
-							      (concatenate 'string name "\\")))))
+							      (concatenate 'string name "/")))))
 	 (handle 
 	  (%make-handle :id id
 			:fh (pack-fh id)
@@ -120,8 +120,8 @@ the handles list. Returns the newly allocated handle."
 (defun allocate-dhandle (provider dhandle name)
 
   (let ((lc (char name (1- (length name)))))
-    (unless (string= lc #\\)
-      (setf name (concatenate 'string name "\\"))))
+    (unless (string= lc #\/)
+      (setf name (concatenate 'string name "/"))))
 
   (let ((h (lookup-handle provider
 			  (cl-fad:merge-pathnames-as-directory (handle-pathname dhandle) name))))
