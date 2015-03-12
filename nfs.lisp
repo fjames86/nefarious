@@ -21,15 +21,18 @@
 (defxtype* nfs-path3 () :string)
 (defxtype* fileid3 () :uint64)
 (defxtype* cookie3 () :uint64)
+
 (defxtype* cookie-verf3 () (:array :octet +nfs-cookie-verf-size+))
 (defun make-cookie-verf3 ()
-  (make-array +nfs-cookie-verf-size+))
+  (nibbles:make-octet-vector +nfs-cookie-verf-size+))
+
 (defxtype* create-verf3 () (:array :octet +nfs-create-verf-size+))
 (defun make-create-verf3 ()
-  (make-array +nfs-create-verf-size+))
+  (nibbkles:make-octet-vector +nfs-create-verf-size+))
+
 (defxtype* write-verf3 () (:array :octet +nfs-write-verf-size+))
 (defun make-write-verf3 ()
-  (make-array +nfs-write-verf-size+))
+  (nibbles:make-octet-vector +nfs-write-verf-size+))
 
 (defxtype* uid3 () :uint32)
 (defxtype* gid3 () :uint32)
