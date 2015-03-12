@@ -14,7 +14,7 @@
    (:file "errors" :depends-on ("nfs"))
    (:file "mount" :depends-on ("providers"))
    (:file "interface" :depends-on ("errors"))
-   (:file "server" :depends-on ("interface"))
+   (:file "server" :depends-on ("interface" "mount"))
    (:file "streams" :depends-on ("server"))
    (:file "simple" :depends-on ("streams")))
   :depends-on (:frpc :cl-fad :trivial-gray-streams))
