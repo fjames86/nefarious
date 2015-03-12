@@ -28,7 +28,7 @@
 
 (defxtype* create-verf3 () (:array :octet +nfs-create-verf-size+))
 (defun make-create-verf3 ()
-  (nibbkles:make-octet-vector +nfs-create-verf-size+))
+  (nibbles:make-octet-vector +nfs-create-verf-size+))
 
 (defxtype* write-verf3 () (:array :octet +nfs-write-verf-size+))
 (defun make-write-verf3 ()
