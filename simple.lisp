@@ -79,7 +79,7 @@
 (defclass simple-provider (nfs-provider)
   ((file-id :initform 1 :accessor simple-provider-id)
    (handles :initform nil :accessor simple-provider-handles
-	    :documentation "Hash-table mapping octet-array NFS handles to handle structures.")
+	    :documentation "List of handle structures.")
    (mount-handle :initarg :mount-handle :reader simple-provider-mount-handle
 		 :documentation "The handle for the exported (toplevel) directory.")))
 

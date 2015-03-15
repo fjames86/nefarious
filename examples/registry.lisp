@@ -64,17 +64,28 @@
   (desired :uint32)
   (result :pointer))
 
-(defparameter *hkey-trees* 
-  '((:classes-root . 2147483648) 
-    (:current-user . 2147483649) 
-    (:local-machine . 2147483650) 
-    (:users . 2147483651) 
-    (:current-config . 2147483653)))
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defparameter *hkey-trees* 
+    '((:classes-root . 2147483648) 
+      (:current-user . 2147483649) 
+      (:local-machine . 2147483650) 
+      (:users . 2147483651) 
+      (:current-config . 2147483653))))
 
 (defun resolve-key (key)
-  (etypecase key
-    (keyword (cdr (assoc key *hkey-trees*)))
-    (integer key)))
+  (macrolet ((hive (k)
+	       `(ecase ,k
+		  ,@(mapcar (lambda (pair)
+			      `(,(car pair) ,(cdr pair)))
+			    *hkey-trees*))))
+    (etypecase key 
+      (keyword (hive key))
+      (integer key))))
+
+;;(defun resolve-key (key)
+;;  (etypecase key
+;;    (keyword (cdr (assoc key *hkey-trees*)))
+;;    (integer key)))
 
 (defconstant +desire-all-access+ #xf003f)
 
@@ -340,9 +351,14 @@
 				 sbuff)))
 	    (if (= res 0)
 		(values 
-		 (let ((v (make-array (mem-ref sbuff :uint32) :element-type '(unsigned-byte 8))))
-		   (dotimes (i (mem-ref sbuff :uint32))
-		     (setf (aref v i) (mem-ref buffer :uint8 i)))
+		 (let ((v (make-array (+ 4 (mem-ref sbuff :uint32))
+				      :element-type '(unsigned-byte 8)))
+		       (s (mem-ref sbuff :uint32)))
+		   (setf (nibbles:ub32ref/be v 0)
+			 (mem-ref tbuff :uint32))
+		   (do ((i 0 (1+ i)))
+		       ((= i s))
+		     (setf (aref v (+ i 4)) (mem-ref buffer :uint8 i)))
 		   v)
 		 (first (find (mem-ref tbuff :uint32) *reg-types* :key #'second)))
 		(error 'win-error :code res)))))))
@@ -350,39 +366,71 @@
 ;; -----------------------------------------------------
 
 
-		      
-;; the provider class
-(defclass registry-provider (simple-provider)
-  ())
-
 ;; basic idea:
 ;; registry keys correspond to NFS directories.
 ;; registry values correspond to NFS files.
-
 
 (defstruct (rhandle (:constructor %make-rhandle))
   tree ;; keyword from *hkey-trees*, :local-machine, :current-user, etc
   key ;; a string naming the full path to the key
   name ;; name of value (if any)
   fh
-  parent) 
+  parent)
+		      
+;; the provider class
+(defclass registry-provider (nfs-provider)
+  ((next :initform 0 :accessor next-id)
+   (handles :initform nil :accessor handles)
+   (mount :initarg :mount :accessor mount-handle)))
+
+(defun pack-fh (id)
+  (let ((v (nibbles:make-octet-vector 4)))
+    (setf (nibbles:ub32ref/be v 0) id)
+    v))
+
+(defun allocate-fh (provider)
+  (let ((id (next-id provider)))
+    (incf (next-id provider))
+    (pack-fh id)))
+
+(defun find-rhandle (provider &key fh key name)
+  (cond
+    (fh (find fh (handles provider) :key #'rhandle-fh :test #'equalp))
+    ((and key name)
+     (find-if (lambda (h)
+		(and (rhandle-key h) (rhandle-name h)
+		     (string= (rhandle-key h) key)
+		     (string= (rhandle-name h) name)))
+	      (handles provider)))
+    (key 
+     (find-if (lambda (h)
+		(and (rhandle-key h) (not (rhandle-name h))
+		     (string= (rhandle-key h) key)))
+	      (handles provider)))
+    (t (error "Must provider a FH, KEY or KEY and NAME"))))
 
 (defun make-rhandle (&key rhandle tree key name)
-  (let ((handle 
-	 (%make-rhandle :tree (or tree (rhandle-tree rhandle))
-			:key (when (or (and rhandle (rhandle-key rhandle)) key)
-			       (concatenate 'string 
-					    (when rhandle (rhandle-key rhandle))
-					    (when (and rhandle (rhandle-key rhandle) key) "\\")
-					    key))
-			:name name
-			:parent (when rhandle (rhandle-fh rhandle)))))
-    (setf (rhandle-fh handle)
-	  (frpc:pack #'frpc::write-uint64 
-		     (sxhash (concatenate 'string
-					  (symbol-name (rhandle-tree handle))
-					  (rhandle-key handle)
-					  (rhandle-name handle)))))
+  (%make-rhandle :tree (or tree (rhandle-tree rhandle))
+		 :key (when (or (and rhandle (rhandle-key rhandle)) key)
+			(concatenate 'string 
+				     (when rhandle (rhandle-key rhandle))
+				     (when (and rhandle (rhandle-key rhandle) key) "\\")
+				     key))
+		 :name name
+		 :parent (when rhandle (rhandle-fh rhandle))))
+
+(defun allocate-rhandle (provider &key rhandle tree key name)
+  (let ((handle (make-rhandle :rhandle rhandle 
+			      :tree tree
+			      :key key
+			      :name name)))
+    (let ((h (find-rhandle provider 
+			   :key (rhandle-key handle)
+			   :name (rhandle-name handle))))
+      (when h (return-from allocate-rhandle h)))
+
+    (setf (rhandle-fh handle) (allocate-fh provider))
+    (push handle (handles provider))
     handle))
 
 (defun parse-keypath (path)
@@ -417,37 +465,27 @@
     (error ()
       nil)))
 
-(defun allocate-rhandle (provider rhandle &key key name)
-  (let ((handle (make-rhandle :rhandle rhandle
-			      :key key 
-			      :name name)))
-    (setf (gethash (rhandle-fh handle)
-		   (simple-provider-handles provider))
-	  handle)
-    handle))
-
-(defun find-rhandle (provider h)
-  (gethash h (simple-provider-handles provider)))
-
 (defun make-registry-provider (tree &optional key)
-  (let ((mhandle (make-rhandle :tree tree :key key)))
-    (let ((provider 
-	   (make-instance 'registry-provider
-			  :mount-handle mhandle)))
-      (allocate-rhandle provider mhandle)
+  (let ((provider (make-instance 'registry-provider)))
+    (let ((mhandle (make-rhandle :tree tree
+				 :key key)))
+      (setf (rhandle-fh mhandle) (allocate-fh provider))
+      (setf (mount-handle provider) mhandle)
+      (push mhandle (handles provider))
       provider)))
 
 ;; ------------------------------------------
 ;; for the mount protocol
 (defmethod nfs-provider-mount ((provider registry-provider) client)
-  (rhandle-fh (simple-provider-mount-handle provider)))
+  (rhandle-fh (mount-handle provider)))
 
 (defmethod nfs-provider-unmount ((provider registry-provider) client)
   nil)
 
 ;; for nfs
 (defmethod nfs-provider-attrs ((provider registry-provider) fh)
-  (let ((rhandle (find-rhandle provider fh)))
+  (log:debug "get-attrs: ~A" fh)
+  (let ((rhandle (find-rhandle provider :fh fh)))
     (if rhandle
 	(let* ((name (rhandle-name rhandle))
 	       (size (when name 
@@ -456,7 +494,7 @@
 				       (rhandle-name rhandle)
 				       (rhandle-key rhandle))))))
 	  (make-fattr3 :type (if name :reg :dir)
-		       :mode 0
+		       :mode #xff ;; FIXME: what to put here?
 		       :uid 0
 		       :gid 0
 		       :size (if name size 0)
@@ -472,37 +510,41 @@
 ;;  nil)
 
 (defmethod nfs-provider-lookup ((provider registry-provider) dh name)
-  (let ((dhandle (find-rhandle provider dh)))
+  (let ((dhandle (find-rhandle provider :fh dh)))
     (if dhandle 
+	;; start by trying a registry key (i.e. a directory)
 	(let ((handle (make-rhandle :rhandle dhandle
 				    :key name)))
 	  (cond
-	    ((string= name ".") dh)
+	    ((string= name ".") dh) 
 	    ((string= name "..") 
-	     (let ((ph (rhandle-parent handle)))
-	       (if ph
+	     (let ((ph (rhandle-parent dhandle)))
+	       (if ph 
 		   ph
 		   (error 'nfs-error :stat :noent))))
 	    ((rhandle-exists-p handle)
-	     (allocate-rhandle provider dhandle :key name)
-	     (rhandle-fh handle))
+	     (let ((handle (allocate-rhandle provider 
+					     :rhandle dhandle 
+					     :key name)))
+	       (rhandle-fh handle)))
 	    (t 
+	     ;; not a key, try a value
 	     (let ((handle (make-rhandle :rhandle dhandle
 					 :name name)))
 	       (log:debug "key: ~A name: ~A" (rhandle-key dhandle) name)
 	       (cond
-		 ((string= name ".")
-		  (rhandle-fh dhandle))
 		 ((rhandle-exists-p handle)
-		  (allocate-rhandle provider dhandle :name name)
-		  (rhandle-fh handle))
+		  (let ((h (allocate-rhandle provider 
+					     :rhandle dhandle 
+					     :name name)))
+		    (rhandle-fh h)))
 		 (t 
 		  (error 'nfs-error :stat :noent)))))))
 	(error 'nfs-error :stat :noent))))
 
 (defmethod nfs-provider-read ((provider registry-provider) fh offset count)
   "Read count bytes from offset from the object."
-  (let ((handle (find-rhandle provider fh)))
+  (let ((handle (find-rhandle provider :fh fh)))
     (if (and handle (rhandle-name handle))
 	(handler-case 
 	    (let ((bytes 
@@ -517,7 +559,7 @@
 
 (defmethod nfs-provider-write ((provider registry-provider) fh offset bytes)
   "Write bytes at offset to the object. Returns the number of bytes written."
-  (let ((handle (find-rhandle provider fh)))
+  (let ((handle (find-rhandle provider :fh fh)))
     (if (and handle (rhandle-name handle))
 	(handler-case 
 	    (reg-set-key-value (rhandle-tree handle)
@@ -532,10 +574,10 @@
 
 (defmethod nfs-provider-create ((provider registry-provider) dh name)
   "Create a new file named NAME in directory DHANDLE."
-  (let ((dhandle (find-rhandle provider dh)))
+  (let ((dhandle (find-rhandle provider :fh dh)))
     (if dhandle
 	(let ((handle (allocate-rhandle provider
-					dhandle
+					:rhandle dhandle
 					:name name)))
 	  (handler-case 
 	      (reg-set-key-value (rhandle-tree handle)
@@ -550,7 +592,7 @@
 
 (defmethod nfs-provider-remove ((provider registry-provider) dh name)
   "Remove the file named HANDLE."
-  (let ((dhandle (find-rhandle provider dh)))
+  (let ((dhandle (find-rhandle provider :fh dh)))
     (if dhandle
 	(handler-case 
 	    (with-reg-key (k (rhandle-key dhandle) :key (rhandle-tree dhandle))
@@ -566,11 +608,13 @@
 
 (defmethod nfs-provider-read-dir ((provider registry-provider) dh)
   "Returns a list of all object (file and directory) names in the directory."
-  (let ((dhandle (find-rhandle provider dh)))
+  (let ((dhandle (find-rhandle provider :fh dh)))
     (if dhandle
 	(handler-case 
 	    (append 
-	     '("." "..")
+	     '(".") 
+	     (unless (equalp dh (rhandle-fh (mount-handle provider)))
+	       '(".."))
 	     (reg-enum-key (or (rhandle-key dhandle) "")
 			   (rhandle-tree dhandle))
 	     (mapcar #'car (reg-enum-value (or (rhandle-key dhandle) "")
@@ -582,10 +626,12 @@
 
 (defmethod nfs-provider-create-dir ((provider registry-provider) dh name)
   "Create a new directory."
-  (let ((dhandle (find-rhandle provider dh)))
+  (let ((dhandle (find-rhandle provider :fh dh)))
     (if dhandle 
 	(handler-case 
-	    (let ((handle (allocate-rhandle provider dhandle :name name)))
+	    (let ((handle (allocate-rhandle provider 
+					    :rhandle dhandle 
+					    :name name)))
 	      (reg-set-key-value (rhandle-tree handle)
 				 name
 				 #()
@@ -600,7 +646,7 @@
 
 (defmethod nfs-provider-remove-dir ((provider registry-provider) dh name)
   "Remove a directory."
-    (let ((dhandle (find-rhandle provider dh)))
+    (let ((dhandle (find-rhandle provider :fh dh)))
       (if dhandle
 	  (handler-case 
 	      (reg-delete-tree (rhandle-tree dhandle)
