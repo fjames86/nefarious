@@ -87,13 +87,13 @@ Windows only. Exports the windows registry as an NFS filesystem.
 
 ## 4. Notes
 
-Nefarious is based on [frpc](https://github.com/fjames86/frpc), the underlying ONCRPC implementation.
+Nefarious is based on [frpc](https://github.com/fjames86/frpc), the underlying ONC-RPC implementation.
 
 The primary purpose of both projects is to get something simple which works, rather than a high-performance, professional
 product. At best, it should be considered an educational project which could be used to form the basis of something better.
 Please do not expect high performance or a bug-free experience, although it would be nice to have both eventually.
 
-The NFS lock protocol needs to be implemented.
+The NLM/NSM protocols (for file locking) needs to be implemented.
 
 ## 5. License
 
