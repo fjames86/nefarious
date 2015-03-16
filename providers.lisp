@@ -16,9 +16,12 @@
 
 (defmethod print-object ((p nfs-provider) stream)
   (print-unreadable-object (p stream :type t)
-    (format stream ":PATH ~A" (provider-path p))))
+    (format stream ":PATH ~S " (provider-path p))))
 
 (defun register-provider (provider export-path)
+  "Register a provider to export on path EXPORT-PATH."
+  (declare (type nfs-provider provider)
+	   (type string export-path))
   (setf (provider-path provider) export-path)
   (let ((old (find-provider (provider-path provider))))
     (cond
