@@ -3,7 +3,7 @@ An NFS client and server in Common Lisp.
 
 ## 1. Introduction
 
-Nefarious is an NFS implemention (both client and server) in Common Lisp. Currently only NFSv3 is supported. 
+Nefarious is an NFS implemention in Common Lisp, supporting both client and server. Currently only NFSv3 is supported. 
 
 The Nefarious client has been used successfully with the [FreeNFS](http://sourceforge.net/projects/freenfs/) on Windows 8.1.
 
@@ -13,18 +13,19 @@ the NFS client that comes with Ubuntu Linux.
 
 ## 2. Client
 
-All the NFS and mount protocol messages are implemented. 
+All the NFS and mount protocol messages are implemented. Find the mount protocol messages 
+in NEFARIOUS.MOUNT package and the NFS messages in NEFARIOUS package. For example:
 
 ```
-(defvar dhandle (nfs.mount:call-mount "/"))
+(defvar dhandle (nfs.mount:call-mount "/" :host "myhost" :protocol :udp))
 
-(nfs:call-read-dir dhandle)
+(nfs:call-read-dir dhandle :host "myhost" :protocol :udp)
 
-(defvar fh (nfs:call-lookup dhandle "foo.txt"))
+(defvar fh (nfs:call-lookup dhandle "foo.txt" :host "myhost" :protocol :udp))
 
-(nfs:call-read fh 0 1024)
+(nfs:call-read fh 0 1024 :host "myhost" :protocol :udp)
 
-(nfs.mount:call-unmount "/")
+(nfs.mount:call-unmount "/" :host "myhost" :protocol :udp)
 ```
 
 ## 2.1 NFS file streams

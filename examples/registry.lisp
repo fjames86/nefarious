@@ -658,7 +658,7 @@
 
 
 ;; filesystem information
-(defmethod nfs-provider-fs-info ((provider registry-provider))
+(defmethod nfs-provider-fs-info ((provider registry-provider) handle)
   "Returns dynamic filesystem information, in an FS-INFO structure."
   (make-fs-info :attrs nil ;; attributes of the file 
 		:rtmax 1024 ;; maximum read request count
@@ -673,7 +673,7 @@
 		:properties (frpc:enum 'nefarious::nfs-info :homogenous)))
 
 
-(defmethod nfs-provider-fs-stat ((provider registry-provider))
+(defmethod nfs-provider-fs-stat ((provider registry-provider) handle)
   "Returns static filesystem information, in an FS-STAT structure."
   (make-fs-stat :attrs nil ;; fileattribvutes
 		:tbytes #xffffffff ;; total size of the filesystem
@@ -684,7 +684,7 @@
 		:afiles #xffffffff ;; available file slots
 		:invarsec 1))
 
-(defmethod nfs-provider-path-conf ((provider registry-provider))
+(defmethod nfs-provider-path-conf ((provider registry-provider) handle)
   "Returns a PATH-CONF structure containing information about the filesystem."
   (make-path-conf :attr nil ;; file attributes
 		  :link-max 0 ;; max link size

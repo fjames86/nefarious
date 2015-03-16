@@ -22,7 +22,7 @@
 (defparameter *mount-port* 635)
 
 (use-rpc-program +mount-program+ +mount-version+)
-(use-rpc-port 635)
+(use-rpc-host '*rpc-host* 635)
 
 (defconstant +mount-path-len+ 1024)
 (defconstant +mount-name-len+ 255)

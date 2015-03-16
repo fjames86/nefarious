@@ -189,10 +189,12 @@ be a string naming the mount-point that is exported by NFS."
       (file-length f))))
 
 (defun create-directory (provider dhandle name)
-  (let ((handle (allocate-dhandle provider dhandle name)))
+  (declare (type handle dhandle)
+	   (type string name))
+  (let ((handle (make-dhandle dhandle name 0)))
     (when handle
       (ensure-directories-exist (handle-pathname handle))
-      handle)))
+      (allocate-dhandle provider dhandle name))))
 
 (defun remove-directory (provider dhandle name)
   (let ((handle (make-dhandle dhandle name (next-provider-id provider))))
@@ -330,7 +332,7 @@ be a string naming the mount-point that is exported by NFS."
 	(let ((handle (create-directory provider dhandle name)))
 	  (if handle
 	      (handle-fh handle)
-	      (error 'nfs-stat :stat :server-fault)))
+	      (error 'nfs-error :stat :server-fault)))
 	(error 'nfs-error :stat :bad-handle))))
 
 
@@ -343,9 +345,8 @@ be a string naming the mount-point that is exported by NFS."
 	    nil)
 	  (error 'nfs-error :stat :bad-handle))))
 
-
 ;; filesystem information
-(defmethod nfs-provider-fs-info ((provider simple-provider))
+(defmethod nfs-provider-fs-info ((provider simple-provider) handle)
   "Returns dynamic filesystem information, in an FS-INFO structure."
   (make-fs-info :attrs nil ;; attributes of the file 
 		:rtmax #xffffffff ;; maximum read request count
@@ -360,7 +361,7 @@ be a string naming the mount-point that is exported by NFS."
 		:properties (frpc:enum 'nefarious::nfs-info :homogenous)))
 
 
-(defmethod nfs-provider-fs-stat ((provider simple-provider))
+(defmethod nfs-provider-fs-stat ((provider simple-provider) handle)
   "Returns static filesystem information, in an FS-STAT structure."
   (make-fs-stat :attrs nil ;; fileattribvutes
 		:tbytes #xffffffff ;; total size of the filesystem
@@ -371,7 +372,7 @@ be a string naming the mount-point that is exported by NFS."
 		:afiles #xffffffff ;; available file slots
 		:invarsec 1))
 
-(defmethod nfs-provider-path-conf ((provider simple-provider))
+(defmethod nfs-provider-path-conf ((provider simple-provider) handle)
   "Returns a PATH-CONF structure containing information about the filesystem."
   (make-path-conf :attr nil ;; file attributes
 		  :link-max 0 ;; max link size

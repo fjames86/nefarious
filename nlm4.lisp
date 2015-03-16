@@ -26,14 +26,14 @@
 
 (in-package #:nefarious.nlm4)
 
+(use-rpc-program +nlm4-program+ +nlm4-version+)
+(use-rpc-host '*rpc-host* nefarious::*nfs-port*)
+
 (defconstant +nlm4-program+ 100021)
 (defconstant +nlm4-version+ 4)
 
 (defconstant +max-netobj+ 1024)
 (defxtype* netobj () (:varray* :octet +max-netobj+))
-
-(use-rpc-program +nlm4-program+ +nlm4-version+)
-(use-rpc-port nefarious::*nfs-port*)
 
 (defxenum nlm4-stats 
   ((:granted 0)

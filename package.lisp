@@ -6,8 +6,8 @@
  (:use #:cl #:frpc #:trivial-gray-streams)
  (:nicknames #:nfs)
  (:export #:call-null
-	  #:call-get-attr
-	  #:call-set-attr
+	  #:call-get-attrs
+	  #:call-set-attrs
 	  #:call-lookup
 	  #:call-access
 	  #:call-readlink
@@ -73,6 +73,9 @@
 	  #:nfs-provider-attrs
 	  #:nfs-provider-lookup
 	  #:nfs-provider-access
+	  #:nfs-provider-read-link
+	  #:nfs-provider-create-symlink
+	  #:nfs-provider-link
 	  #:nfs-provider-read
 	  #:nfs-provider-write
 	  #:nfs-provider-create
@@ -85,13 +88,11 @@
 	  #:nfs-provider-fs-stat
 	  #:nfs-provider-path-conf
 	  #:nfs-provider-create-device 
+	  #:nfs-provider-commit 
 
-	  ;; the simple (default) provdider
+	  ;; the simple (default) provider
 	  #:make-simple-provider
 	  #:simple-provider
-	  #:simple-provider-handles
-	  #:simple-provider-clients
-	  #:simple-provider-mount-handle
 
 	  ))
 
