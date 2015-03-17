@@ -94,7 +94,8 @@
 
 (defun create-file (name &key (access #x10000000) (mode 0) (disposition 3) (flags 0))
   (let ((handle (%create-file name access mode (null-pointer) disposition flags (null-pointer))))
-    (if (pointer-eq handle (make-pointer #xffffffffffffffff))
+    (if (pointer-eq handle (make-pointer #+(or x86-64 x64 amd64)#xffffffffffffffff
+                                         #-(or x86-64 x64 amd64)#xffffffff))
         (get-last-error)
         handle)))
 
