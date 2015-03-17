@@ -116,6 +116,13 @@
 
 ;; ----------------
 
+;; there is very little information on how to implement these
+;; I can't find any RFC defining them, only the NFSv3 RFC seems to mention
+;; them and it only says that they are the same as in the NFSv2 version
+;; but NFSv2 RFC doesn't mention them at all.
+;; see the linux kernel sources for examples of how to implenent them:
+;; http://git.kernel.org/cgit/linux/kernel/git/stable/linux-stable.git/tree/fs/lockd/svcproc.c
+
 ;; syncronous procedures 
 
 (defrpc call-null 0 :void :void
@@ -129,11 +136,13 @@
 (defrpc call-cancel 3 nlm4-cancel-args nlm4-res)
 (defrpc call-unlock 4 nlm4-unlock-args nlm4-res)
 
-
 ;; server NLM callback procedure to grant lock
 (defrpc call-granted 5 nlm4-test-args nlm4-res)
 
 ;; asyncronous requests and responses
+;; should send the async replies in the body of the handler
+;; i.e. before the original request was sent. this is the same 
+;; thing that the linux kernel does so it should be ok 
 (defrpc call-test-msg 6 nlm4-test-args :void)
 (defrpc call-lock-msg 7 nlm4-lock-args :void)
 (defrpc call-cancel-msg 8 nlm4-cancel-args :void)
@@ -146,6 +155,7 @@
 (defrpc call-granted-res 15 nlm4-res :void)
 
 ;; syncronous non-monitored lock and DOS file-sharing procedures 
+;; don't support these
 (defrpc call-share 20 nlm4-share-args nlm4-share-res)
 (defrpc call-unshare 21 nlm4-share-args nlm4-share-res)
 (defrpc call-nm-lock 22 nlm4-lock-args nlm4-res)
