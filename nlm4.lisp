@@ -131,13 +131,39 @@
   (declare (ignore void))
   nil)
 
-(defrpc call-test 1 nlm4-test-args ntlm-test-res)
-(defrpc call-lock 2 nlm4-lock-args nlm4-res)
-(defrpc call-cancel 3 nlm4-cancel-args nlm4-res)
-(defrpc call-unlock 4 nlm4-unlock-args nlm4-res)
+(defrpc call-test 1 nlm4-test-args ntlm-test-res
+  (:documentation "Check for conflicting lock."))
+(defhandler %handle-test (args 1)
+  (destructuring-bind (cookie exclusive alock) args
+    (declare (ignore exclusive alock))
+    (list cookie (make-xunion :granted nil))))
+
+(defrpc call-lock 2 nlm4-lock-args nlm4-res
+  (:documentation "Lock the specified file."))
+(defhandler %handle-lock (args 2)
+  (list (nlm4-lock-args-cookie args)
+	(make-xunion :granted nil)))
+
+(defrpc call-cancel 3 nlm4-cancel-args nlm4-res
+  (:documentation "Cancel a previously blocked request."))
+(defhandler %handle-cancel (args 3)
+  (destructuring-bind (cookie block exclusive alock) args
+    (declare (ignore block exclusive alock))
+    (list cookie (make-xunion :granted nil))))
+
+(defrpc call-unlock 4 nlm4-unlock-args nlm4-res
+  (:documentation "Release a lock."))
+(defhandler %handle-unlock (args 4)
+  (destructuring-bind (cookie alock) args
+    (declare (ignore alock))
+    (list cookie (make-xunion :granted nil))))
 
 ;; server NLM callback procedure to grant lock
 (defrpc call-granted 5 nlm4-test-args nlm4-res)
+(defhandler %handle-granted (args 5)
+  (destructuring-bind (cookie exclusive alock) args
+    (declare (ignore exclusive alock))
+    (list cookie (make-xunion :granted nil))))
 
 ;; asyncronous requests and responses
 ;; should send the async replies in the body of the handler
