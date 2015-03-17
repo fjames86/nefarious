@@ -9,6 +9,7 @@
            #:*default-nsm-pathspec*
            #:load-nsm-state
            #:save-nsm-state 
+	   #:init-nsm
 
            ;; rpcs  
            #:call-null
@@ -148,11 +149,12 @@
                            :timeout nil)))
         (error () nil)))))
 
-;; ensure the state has been loaded 
-(eval-when (:load-toplevel)
-  (load-nsm-state)
+(defun init-nsm (&optional pathspec)
+  "Load and increment the state variable, then notify all servers."
+  (load-nsm-state pathspec)
   (incf *state*)
-  (save-nsm-state))
+  (save-nsm-state pathspec)
+  (notify-servers))
 
 ;; ----------------------------------------
 
