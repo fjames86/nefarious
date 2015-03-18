@@ -8,15 +8,9 @@
 
 (in-package #:nefarious.block)
 
-(defcfun (%create-file "CreateFileA" :convention :stdcall)
-    :pointer 
-  (filename :string)
-  (access :uint32)
-  (mode :uint32)
-  (attrs :pointer)
-  (disposition :uint32)
-  (flags :uint32)
-  (template :pointer))
+
+(defun get-last-error ()
+  (nefarious.finfo::get-last-error))
 
 ;; access 
 ;;#define GENERIC_READ                     (0x80000000L)
@@ -39,66 +33,12 @@
 ;; flags
 ;; FILE_ATTRIBUTE_NORMAL 128
 
-
-
-(defcfun (close-handle "CloseHandle" :convention :stdcall)
-    :void
-  (handle :pointer))
-
-(define-foreign-library advapi
-  (:windows "Advapi32.dll"))
-
-(use-foreign-library advapi)
-
-;; for errors
-(defcfun (%format-message "FormatMessageA" :convention :stdcall)
-    :uint32
-  (flags :uint32)
-  (source :pointer)
-  (msg-id :uint32)
-  (lang-id :uint32)
-  (buffer :pointer)
-  (size :uint32)
-  (args :pointer))
-
-(defun format-message (code)
-  "Use FormatMessage to convert the error code into a system-defined string."
-  (with-foreign-object (buffer :char 1024)
-    (let ((n (%format-message #x00001000
-			      (null-pointer)
-			      code
-			      0
-			      buffer
-			      1024
-			      (null-pointer))))
-      (if (= n 0)
-	  (error "Failed to format message")
-	  (foreign-string-to-lisp buffer :count (- n 2))))))
-
-(define-condition win-error (error)
-  ((code :initform 0 :initarg :code :reader win-error-code))
-  (:report (lambda (condition stream)
-	     (format stream "ERROR ~A: ~A" 
-		     (win-error-code condition)
-		     (format-message (win-error-code condition))))))
-	   
-
-
-
-(defcfun (%get-last-error "GetLastError" :convention :stdcall) :long)
-
-(defun get-last-error ()
-  (let ((code (%get-last-error)))
-    (unless (zerop code)
-      (error 'win-error :code code))))
-
 (defun create-file (name &key (access #x10000000) (mode 0) (disposition 3) (flags 0))
-  (let ((handle (%create-file name access mode (null-pointer) disposition flags (null-pointer))))
+  (let ((handle (nefarious.finfo::%create-file name access mode (null-pointer) disposition flags (null-pointer))))
     (if (pointer-eq handle (make-pointer #+(or x86-64 x64 amd64)#xffffffffffffffff
                                          #-(or x86-64 x64 amd64)#xffffffff))
         (get-last-error)
         handle)))
-
 
 (defcfun (%device-io-control "DeviceIoControl" :convention :stdcall)
     :boolean
@@ -155,7 +95,7 @@
 			    (geometry-bytes g)))
                    g)
                  (get-last-error))))
-    (close-handle handle))))
+    (nefarious.finfo::%close-handle handle))))
   
 #|  
 typedef enum _MEDIA_TYPE {
@@ -290,7 +230,7 @@ typedef enum _MEDIA_TYPE {
 		   :geometry (get-disk-geometry device-path))))
 
 (defun close-block-provider (provider)
-  (close-handle (block-handle provider)))
+  (nefarious.finfo::%close-handle (block-handle provider)))
 
 
 ;; for the mount protocol
@@ -305,7 +245,7 @@ typedef enum _MEDIA_TYPE {
   (cond
     ((equalp fh (block-mount-fh provider))
      (make-fattr3 :type :dir
-		  :mode #xff
+		  :mode #x66666666
 		  :uid 0
 		  :gid 0
 		  :size 0
@@ -367,9 +307,9 @@ typedef enum _MEDIA_TYPE {
   (list (block-dev-name provider)))
 
 ;; filesystem information
-(defmethod nfs-provider-fs-info ((provider block-provider))
+(defmethod nfs-provider-fs-info ((provider block-provider) handle)
   "Returns dynamic filesystem information, in an FS-INFO structure."
-  (make-fs-info :attrs nil ;; attributes of the file 
+  (make-fs-info :attrs (nfs-provider-attrs provider handle) ;; attributes of the file 
 		:rtmax 1024 ;; maximum read request count
 		:rtpref 1024 ;; preferred read count -- should be same as rtmax
 		:rtmult 4 ;; suggested multiple for read requests
@@ -381,9 +321,9 @@ typedef enum _MEDIA_TYPE {
 		:time-delta (make-nfs-time3 :seconds 1)
 		:properties (enum 'nefarious::nfs-info :homogenous)))
 
-(defmethod nfs-provider-fs-stat ((provider block-provider))
+(defmethod nfs-provider-fs-stat ((provider block-provider) handle)
   "Returns static filesystem information, in an FS-STAT structure."
-  (make-fs-stat :attrs nil ;; fileattribvutes
+  (make-fs-stat :attrs (nfs-provider-attrs provider handle) ;; fileattribvutes
 		:tbytes #xffffffff ;; total size of the filesystem
 		:fbytes #xffffffff ;; free bytes
 		:abytes #xffffffff ;; available bytes
@@ -392,13 +332,13 @@ typedef enum _MEDIA_TYPE {
 		:afiles #xffffffff ;; available file slots
 		:invarsec 1))
 
-(defmethod nfs-provider-path-conf ((provider block-provider))
+(defmethod nfs-provider-path-conf ((provider block-provider) handle)
   "Returns a PATH-CONF structure containing information about the filesystem."
-  (make-path-conf :attr nil ;; file attributes
+  (make-path-conf :attr (nfs-provider-attrs provider handle) ;; file attributes
 		  :link-max 0 ;; max link size
 		  :link-max 0 ;; maximum number of hard links to an object
 		  :name-max 255 ;; maximum file name
-		  :no-trunc t ;; if T the server will reject any request with a name longer than 
+		  :no-trunc t ;; if T the server will reject any request with a name longer than max name
 		  :chown-restricted t ;; will reject any attempt to chown
 		  :case-insensitive t ;; case insensitive filesystem
 		  :case-preserving t))
