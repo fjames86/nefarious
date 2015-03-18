@@ -8,26 +8,38 @@
 ;; the rpc server 
 (defvar *server* nil)
 
-(defun start (&key (port-mapper t) (nsm t))
-  "Start the NFS server. If PORT-MAPPER is nil, then it is assumed the port-mapper program is running externally to Lisp and all port mappings are added using RPC calls to it. Otherwise the server will run its own port mapper by listening on port 111, in addition to ports 635 and 2049 which are always used."
+(defun start (&key (port-mapper t) (nsm t) ports)
+  "Start the NFS server. If PORT-MAPPER is nil, then it is assumed the port-mapper program is running externally to Lisp and all port mappings are added using RPC calls to it. Otherwise the server will run its own port mapper by listening on port 111.
+
+When NSM is non-nil, the NSM program, which facilitates server state change notifications, will be supported.
+
+If PORTS is supplied, it shouild be a list of integers specifying the port numbers to listen on (TCP and UDP will be used). Otherwise 
+the default port numbers 2049 and 635 will be used.
+
+"
   ;; make a new server instance
   (setf *server* (make-rpc-server))
+  
+  ;; if no ports specified, use the default ports
+  (unless ports 
+    (setf ports (list *nfs-port* nefarious.mount:*mount-port*)))
 
-  (let ((ports (append (when port-mapper 
-			 (list port-mapper:*pmap-port*))
-		       (list *nfs-port* 
-			     nfs.mount:*mount-port*))))
-    ;; setup the port mappings
-    (port-mapper:add-all-mappings ports ports 
-                                  :rpc (not port-mapper))
+  ;; when running port mapper program, ensure the port mapper ports are used.
+  ;; this is vital for any external systems to find our programs 
+  (when port-mapper 
+    (pushnew 111 ports :test #'=))
 
-    ;; when using locking NLM/NSM protocols we need to initialize the state variable 
-    (when nsm (nsm:init-nsm))
-
-    ;; start the RPC server 
-    (start-rpc-server *server* 
-		      :tcp-ports ports
-		      :udp-ports ports)))
+  ;; setup the port mappings
+  (port-mapper:add-all-mappings ports ports 
+				:rpc (not port-mapper))
+  
+  ;; when using locking NLM/NSM protocols we need to initialize the state variable 
+  (when nsm (nsm:init-nsm))
+  
+  ;; start the RPC server 
+  (start-rpc-server *server* 
+		    :tcp-ports ports
+		    :udp-ports ports))
 
 (defun stop ()
   "Stop the NFS server."

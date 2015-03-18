@@ -180,14 +180,6 @@ be a string naming the mount-point that is exported by NFS."
   (let ((handle (make-handle dhandle name (next-provider-id provider))))
     (delete-file (handle-pathname handle))))
 
-(defun file-size (handle)
-  (unless (or (handle-directory-p handle) 
-	      (string= (pathname-name (handle-pathname handle)) ".")
-	      (string= (pathname-name (handle-pathname handle)) ".."))
-    (with-open-file (f (handle-pathname handle) :direction :input 
-		       :element-type '(unsigned-byte 8))
-      (file-length f))))
-
 (defun create-directory (provider dhandle name)
   (declare (type handle dhandle)
 	   (type string name))
@@ -215,21 +207,19 @@ be a string naming the mount-point that is exported by NFS."
 (defmethod nfs-provider-attrs ((provider simple-provider) fh)
   (let ((handle (find-handle provider fh)))
     (if handle
-	(let ((size (file-size handle))
-	      (time (- (file-write-date (handle-pathname handle))
-		       #.(encode-universal-time 0 0 0 1 1 1970))))
+	(let ((info (nefarious.finfo:get-file-information (handle-pathname handle))))
 	  (make-fattr3 :type (if (handle-directory-p handle)
 				 :dir
 				 :reg)
-		       :mode #xff ;; FIXME: what should go here?
-		       :uid 0
-		       :gid 0
-		       :size (or size 0)
-		       :used (or size 0)
+		       :mode #x666666 ;; FIXME: what should go here?
+		       :uid 1000
+		       :gid 1000
+		       :size (or (nefarious.finfo:file-information-size info) 0)
+		       :used (or (nefarious.finfo:file-information-size info) 0)
 		       :fileid 0
-		       :atime (make-nfs-time3 :seconds time)
-		       :mtime (make-nfs-time3 :seconds time)
-		       :ctime (make-nfs-time3 :seconds time)))
+		       :atime (make-nfs-time3 :seconds (or (nefarious.finfo:file-information-atime info) 0))
+		       :mtime (make-nfs-time3 :seconds (or (nefarious.finfo:file-information-mtime info) 0))
+		       :ctime (make-nfs-time3 :seconds (or (nefarious.finfo:file-information-ctime info) 0))))
 	(error 'nfs-error :stat :bad-handle))))
 
 ;; don't support this

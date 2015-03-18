@@ -1,7 +1,7 @@
 ;;;; Copyright (c) Frank James 2015 <frank.a.james@gmail.com>
 ;;;; This code is licensed under the MIT license.
 
-(defpackage #:network-status-monitor
+(defpackage #:nefarious.nsm
   (:use #:cl #:frpc)
   (:nicknames #:nsm)
   (:export #:register
@@ -19,7 +19,7 @@
            #:call-unmonitor-all
            #:call-notify))
 
-(in-package #:network-status-monitor)
+(in-package #:nefarious.nsm)
 
 ;; ------------------------------------------
 
@@ -43,8 +43,6 @@
    (program :int32)
    (version :int32)
    (proc :int32)))
-
-(defxtype* stat-change () (:list :string :int32)) ;; name state
 
 ;; -----------------------------------------
 
@@ -80,7 +78,7 @@
   "Stop receiving notifications of state changes for HOSTNAME. You should supply the same FUNCTION or program/version as in the REGISTER-CLIENT call."
   (setf *clients*
         (remove-if (lambda (client)
-                     (when (string= (client-hostname client) hostname)
+                     (when (string-equal (client-hostname client) hostname)
                        (or (and function 
                                 (eq function (client-function client)))
                            (and id 
@@ -103,14 +101,17 @@
    (servers (:varray :string))))
 
 (defun save-nsm-state (&optional pathspec)
+  "Save the local state number and list of notification servers to a data file."
   (with-open-file (f (or pathspec *default-nsm-pathspec*)
                      :direction :output 
                      :if-exists :supersede 
                      :element-type '(unsigned-byte 8))
-    (write-nsm-state f (make-nsm-state :state *state*
-                                       :servers *servers*))))
+    (write-nsm-state f 
+		     (make-nsm-state :state *state*
+				     :servers *servers*))))
 
 (defun load-nsm-state (&optional pathspec)
+  "Load the local state number and list of notification servers from the data file."
   (handler-case 
       (with-open-file (f (or pathspec *default-nsm-pathspec*)
                          :direction :input 
@@ -124,6 +125,7 @@
       (load-nsm-state pathspec))))
       
 (defun register-server (hostname)
+  "Register a server to receive notifications when our state changes."
   (pushnew hostname *servers* :test #'string-equal)
   (save-nsm-state)
   nil)
@@ -134,6 +136,7 @@
   nil)
 
 (defun notify-servers ()
+  "Tell all registered servers that our state has changed."
   (let ((local-hostname (machine-instance)))
     (dolist (server *servers*)
       (handler-case 
@@ -159,7 +162,9 @@
 ;; ----------------------------------------
 
 (defun register (hostname function &optional private)
-  "Register to receive notifications on state change of the host named HOSTNAME."
+  "Register to receive notifications on state change of the host named HOSTNAME. 
+
+The FUNCTION will be executed with arguments (hostname state private)."
   (register-server hostname)
   (register-client hostname :function function :private private))
 
@@ -250,14 +255,11 @@
   "Send a notification to the specifed host/program/version/proc. If PORT is not supplied, the portmapper program ion the remote machine is queried."
   ;; if no port specified, then use port-mapper to find it
   (unless port
-    (let ((the-port (port-mapper:call-get-port program version 
-                                           :query-protocol :udp 
-                                           :protocol :udp
-                                           :timeout nil
-                                           :host hostname)))
-      (if the-port
-          (setf port the-port)
-          (error "Failed to query portmapper for reply port."))))
+    (setf port 
+	  (port-mapper:call-get-port program version 
+				     :query-protocol :udp 
+				     :protocol :udp
+				     :host hostname)))
 
   ;; should now have a reply port, send the notification
   (call-rpc #'write-notify-arg 
@@ -278,24 +280,25 @@
   (:documentation "This RPC is used to inform servers that our local state has changed. NAME should be the local hostname, STATE should be the local state number."))
 (defhandler %handle-notify (arg 6)
   (destructuring-bind (hostname state) arg
-    (dolist (client *clients*)
-      (when (string= hostname (client-hostname client))
-        (cond
-          ((client-function client)
-           ;; a function was supplied, run it
-           (funcall (client-function client) 
-                    hostname 
-                    state 
-                    (client-private client)))
-          ((client-id client)
-           ;; an RPC was specified, call it 
-           (let ((id (client-id client)))
-             (send-notification (client-private client)
-                                (my-id-name id)
-                                (my-id-program id)
-                                (my-id-version id)
-                                (my-id-proc id)
-                                (client-port client))))))))
+    (let ((local-hostname (machine-instance)))
+      (dolist (client *clients*)
+	(when (string-equal hostname (client-hostname client))
+	  (cond
+	    ((client-function client)
+	     ;; a function was supplied, run it
+	     (funcall (client-function client) 
+		      hostname 
+		      state 
+		      (client-private client)))
+	    ((client-id client)
+	     ;; an RPC was specified, call it 
+	     (let ((id (client-id client)))
+	       (send-notification (list local-hostname *state* (client-private client))
+				  (my-id-name id)
+				  (my-id-program id)
+				  (my-id-version id)
+				  (my-id-proc id)
+				  (client-port client)))))))))
   nil)
 
 
