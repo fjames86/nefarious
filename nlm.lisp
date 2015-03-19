@@ -16,25 +16,29 @@
 (defpackage #:nefarious.nlm
   (:use #:cl #:frpc)
   (:nicknames #:nlm)
-  (:export #:call-null
-;;	   #:call-test
-	   #:call-lock
-	   #:call-cancel
-	   #:call-unlock
-	   #:call-granted
-;;	   #:call-test-msg
-;;	   #:call-lock-msg
-;;	   #:call-cancel-msg
-;;	   #:call-unlock-msg
-;;	   #:call-granted-msg
-;;	   #:call-test-res
-;;	   #:call-lock-res
-;;	   #:call-cancel-res
-;;	   #:call-unlock-res
-;;	   #:call-granted-res
-;;	   #:call-share
-;;	   #:call-nm-lock
-;;	   #:call-free-all
+  (:export #:make-nlm-lock
+           #:make-nlm-share
+           
+           ;; rpcs 
+           #:call-null
+           #:call-test
+           #:call-lock
+           #:call-cancel
+           #:call-unlock
+           #:call-granted
+           #:call-test-msg
+           #:call-lock-msg
+           #:call-cancel-msg
+           #:call-unlock-msg
+           #:call-granted-msg
+           #:call-test-res
+           #:call-lock-res
+           #:call-cancel-res
+           #:call-unlock-res
+           #:call-granted-res
+           #:call-share
+           #:call-nm-lock
+           #:call-free-all
 	   
 	   ))
 
@@ -90,7 +94,7 @@
 (defun make-netobj ()
   (nibbles:make-octet-vector +max-netobj+))
 
-(defxenum nlm4-stat
+(defxenum nlm-stat
   ((:granted 0)
    (:denied 1)
    (:denied-no-locks 2)
@@ -114,17 +118,7 @@
    (:write-only 2)
    (:read-write 3)))
 
-(defxtype* nlm4-res ()
-  (:list netobj nlm4-stat)) ;; cookie stat
-
-(defxstruct nlm4-holder ()
-  ((exclusive :boolean)
-   (svid :int32)
-   (oh netobj)
-   (offset :uint64)
-   (len :uint64)))
-
-(defxstruct nlm4-lock ()
+(defxstruct nlm-lock ()
   ((name :string)
    (fh netobj)
    (oh netobj)
@@ -132,46 +126,21 @@
    (offset :uint64)
    (len :uint64)))
 
-(defxstruct nlm4-share ()
+(defxstruct nlm-holder ()
+  ((exclusive :boolean)
+   (id :int32)
+   (oh netobj)
+   (offset :uint64)
+   (len :uint64)))
+
+(defxstruct nlm-share ()
   ((name :string)
    (fh netobj)
    (oh netobj)
    (mode fsh4-mode)
    (access fsh4-mode)))
 
-(defxstruct nlm4-lock-args ()
-  ((cookie netobj)
-   (block :boolean)
-   (exclusive :boolean)
-   (alock nlm4-lock)
-   (reclaim :boolean)
-   (state :int32)))
-
-(defxtype* nlm4-cancel-args ()
-  (:list netobj :boolean :boolean nlm4-lock)) ;; cookie block exclusive alock
-
-(defxtype* nlm4-test-args ()
-  (:list netobj :boolean nlm4-lock)) ;; cookie exclusive alock
-
-(defxtype* nlm4-test-res () ;; cookie stat
-  (:list netobj
-         (:union nlm4-stat
-           (:denied nlm4-holder)
-           (otherwise :void))))
-
-(defxtype* nlm4-unlock-args ()
-  (:list netobj nlm4-lock)) ;; cookie alock
-
-(defxtype* nlm4-share-args ()
-  (:list netobj nlm4-share :boolean)) ;; cookie share reclaim
-
-(defxtype* nlm4-share-res ()
-  (:list netobj nlm4-stat :int32)) ;; cookie stat seqno
-
-(defxtype* nlm4-notify ()
-  (:list :string :uint64)) ;; name state
-
-;; ----------------
+;; --------------------------------
 
 ;; there is very little information on how to implement these
 ;; I can't find any RFC defining them, only the NFSv3 RFC seems to mention
@@ -198,10 +167,15 @@
 
 ;; TEST ::  test whether a lock would be granted 
 
-;;(defrpc call-test 1 nlm4-test-args ntlm-test-res
-;;  (:documentation "Check for conflicting lock. 
-;;
-;;Most NLM servers do not implement this function, and most clients never use it, so it is not implemented here."))
+(defrpc call-test 1 
+  (:list netobj :boolean nlm-lock)
+  (:list netobj 
+         (:union nlm-stat 
+           (:denied nlm-holder)
+           (otherwise :void)))
+  (:arg-transformer (lock &key cookie exclusive)
+    (list cookie exclusive lock))
+  (:documentation "Test whether the monitored lock is available to the client."))
 
 ;;(defhandler %handle-test (args 1)
 ;;  (destructuring-bind (cookie exclusive alock) args
@@ -215,12 +189,20 @@
 ;; the server should sent a GRANTED message to the client, informing it that the 
 ;; lock has been granted to the client.
 
-(defrpc call-lock 2 nlm4-lock-args nlm4-res
-  (:documentation "Lock the specified file."))
+(defrpc call-lock 2 
+  (:list netobj :boolean :boolean nlm-lock :boolean :int32)
+  (:list netobj nlm-stat)
+  (:arg-transformer (lock &key cookie block exclusive reclaim (state 0))
+    (list cookie block exclusive lock reclaim state))
+  (:documentation "Attempt to establish a monitored lock. If BLOCK is non-nil, then if the lock request cannot bec granted immediately the server will return a status of :BLOCKED. When the request can be granted, trhe server will make a callback to the client with the NLM-GRANTED procedure call. If BLOCK is nil and the lock cannot be granted immediately, then the call returns a status of :DENIED.
+
+If RECLAIM is true, the server will assume this is an attempt to re-establish a previous lock (for instance, after a server crash). During the grace-period, the server will only accept locks with RECLAIM of true.
+
+STATE contains the state of the client's NSM. This information is kept by the server implementation, so if the client crashes the server can determine which locks should be discarded by checking the state against the NSM crash notification sent by NSM."))
 
 (defhandler %handle-lock (args 2)
   (with-slots (cookie exclusive alock) args
-    (let ((lock (acquire-lock (nlm4-lock-fh alock)
+    (let ((lock (acquire-lock (nlm-lock-fh alock)
 			      :cookie cookie
 			      :exclusive exclusive)))
       (if lock 
@@ -234,25 +216,35 @@
 ;; Semantically they are not the same, because CANCEL is typically 
 ;; used by the system to clean up clients that didn't exit properly.
 
-(defrpc call-cancel 3 nlm4-cancel-args nlm4-res
-  (:documentation "Cancel a previously blocked request."))
+(defrpc call-cancel 3 
+  (:list netobj :boolean :boolean nlm-lock)
+  (:list netobj nlm-stat)
+  (:arg-transformer (lock &key cookie block exclusive)
+    (list cookie block exclusive lock))
+  (:documentation "Cancels an outstanding blocked lock request. If the client made a LOCK procedure call with BLOCKED true and the procedure was blocked by the server (it returned a status of :BLOCKED), then the client can cancel the outstanding lock request by using this procedure.
+
+The BLOCK, EXCLUSIVE and LOCK arguments must exactly match those in the corresponding LOCK request."))
 
 (defhandler %handle-cancel (args 3)
   (destructuring-bind (cookie block exclusive alock) args
     (declare (ignore block exclusive))
-    (release-lock (nlm4-lock-fh alock))
+    (release-lock (nlm-lock-fh alock))
     (list cookie :granted)))
 
 ;; ------------------------------------------
 
 ;; UNLOCK :: release a lock 
 
-(defrpc call-unlock 4 nlm4-unlock-args nlm4-res
-  (:documentation "Release a lock."))
+(defrpc call-unlock 4 
+  (:list netobj nlm-lock)
+  (:list netobj nlm-stat)
+  (:arg-transformer (lock &key cookie)
+    (list cookie lock))
+  (:documentation "Release a lock. The information in LOCK should match the information in the LOCK which created the lock."))
 
 (defhandler %handle-unlock (args 4)
   (destructuring-bind (cookie alock) args
-    (release-lock (nlm4-lock-fh alock))
+    (release-lock (nlm-lock-fh alock))
     (list cookie :granted)))
 
 ;; --------------------------------------------
@@ -261,7 +253,12 @@
 ;; the client, informing it that it has now acquired the lock
 
 ;; server NLM callback procedure to grant lock
-(defrpc call-granted 5 nlm4-test-args nlm4-res)
+(defrpc call-granted 5 
+  (:list netobj :boolean nlm-lock)
+  (:list netobj nlm-stat)
+  (:arg-transformer (lock &key cookie exclusive)
+    (list cookie exclusive lock))
+  (:documentation "This procedure is the callback from the server running NLM to the host that requested a lock that could not be immediately honoured."))
 
 (defhandler %handle-granted (args 5)
   (destructuring-bind (cookie exclusive alock) args
@@ -275,21 +272,114 @@
 ;; should send the async replies in the body of the handler
 ;; i.e. before the original request was sent. this is the same 
 ;; thing that the linux kernel does so it should be ok 
-;;(defrpc call-test-msg 6 nlm4-test-args :void)
-;;(defrpc call-lock-msg 7 nlm4-lock-args :void)
-;;(defrpc call-cancel-msg 8 nlm4-cancel-args :void)
-;;(defrpc call-unlock-msg 9 nlm4-unlock-args :void)
-;;(defrpc call-granted-msg 10 nlm4-test-args :void)
-;;(defrpc call-test-res 11 nlm4-test-res :void)
-;;(defrpc call-lock-res 12 nlm4-res :void)
-;;(defrpc call-cancel-res 13 nlm4-res :void)
-;;(defrpc call-unlock-res 14 nlm4-res :void)
-;;(defrpc call-granted-res 15 nlm4-res :void)
+
+
+(defrpc call-test-msg 6 
+  (:list netobj :boolean nlm-lock)
+  :void
+  (:arg-transformer (lock &key cookie exclusive)
+    (list cookie exclusive lock))
+  (:documentation "The async version of TEST. Results are returned asyncronously by a call from TEST-RES."))
+
+(defrpc call-lock-msg 7 
+  (:list netobj :boolean :boolean nlm-lock :boolean :int32)
+  :void
+  (:arg-transformer (lock &key cookie block exclusive reclaim (state 0))
+    (list cookie block exclusive lock reclaim state))
+  (:documentation "Results returned asyncronously by a call from LOCK-RES."))
+
+(defrpc call-cancel-msg 8 
+  (:list netobj :boolean :boolean nlm-lock)
+  :void
+  (:arg-transformer (lock &key cookie block exclusive)
+    (list cookie block exclusive lock))
+  (:documentation "Asyncronous version of CANCEL."))
+
+(defrpc call-unlock-msg 9 
+  (:list netobj nlm-lock)
+  :void
+  (:arg-transformer (lock &key cookie)
+    (list cookie lock))
+  (:documentation "Asyncronous version of UNLOCK."))
+
+(defrpc call-granted-msg 10
+  (:list netobj :boolean nlm-lock)
+  :void
+  (:arg-transformer (lock &key cookie exclusive)
+    (list cookie exclusive lock))
+  (:documentation "Asyncronous version of GRANTED."))
+
+(defrpc call-test-res 11 
+  (:list netobj 
+         (:union nlm-stat 
+           (:denied nlm-holder)
+           (otherwise :void)))
+  :void
+  (:arg-transformer (stat cookie &key holder)
+    (list cookie
+          (make-xunion stat
+                       (if (eq stat :denied)
+                           holder
+                           nil))))
+  (:documentation "Asyncronous reply to TEST-MSG."))
+
+(defrpc call-lock-res 12
+  (:list netobj nlm-stat)
+  :void
+  (:arg-transformer (stat cookie)
+    (list cookie stat))
+  (:documentation "asyncronous reply to LOCK-MSG."))
+
+(defrpc call-cancel-res 13
+  (:list netobj nlm-stat)
+  :void
+  (:arg-transformer (stat cookie) (list cookie stat))
+  (:documentation "Asyncronous reply to CANCEL-MSG."))
+
+(defrpc call-unlock-res 14
+  (:list netobj nlm-stat)
+  :void
+  (:arg-transformer (stat cookie) (list cookie stat))
+  (:documentation "asyncronous reply to UNLOCK-MSG."))
+
+(defrpc call-granted-res 15 
+  (:list netobj nlm-stat)
+  :void
+  (:arg-transformer (stat cookie) (list cookie stat))
+  (:documentation "Asyncronous reply to GRANTED-MSG."))
 
 ;; syncronous non-monitored lock and DOS file-sharing procedures 
 ;; don't support these
-;;(defrpc call-share 20 nlm4-share-args nlm4-share-res)
-;;(defrpc call-unshare 21 nlm4-share-args nlm4-share-res)
-;;(defrpc call-nm-lock 22 nlm4-lock-args nlm4-res)
-;;(defrpc call-free-all 23 nlm4-notify :void)
+(defrpc call-share 20 
+  (:list netobj nlm-share :boolean)
+  (:list netobj nlm-stat :int32)
+  (:arg-transformer (share &key cookie reclaim)
+    (list cookie share reclaim))
+  (:documentation "Indicates that a client wishes to open a file using DOS 3.1 and above filesharing modes. 
+
+This procedure does not block: it is the responsibility of the client to retry any failed requests."))
+
+(defrpc call-unshare 21 
+  (:list netobj nlm-share :boolean)
+  (:list netobj nlm-stat :int32)
+  (:arg-transformer (share &key cookie)
+    (list cookie share nil))
+  (:documentation "This procedure informs NLM that the client has closed the file named by the share, and the corresponding share reservation should be released. The reclaim field is unused in the procedure and should be ignored. It is included for symmetry with the NLM-SHARE procedure."))
+
+(defrpc call-nm-lock 22 
+  (:list netobj :boolean :boolean nlm-lock :boolean :int32)
+  (:list netobj nlm-stat)
+  (:arg-transformer (lock &key cookie block exclusive reclaim (state 0))
+    (list cookie block exclusive lock reclaim state))
+  (:documentation "This proceudre should only be called by clients that do not run NSM. This procedure has the same functionality as the LOCK procedure except there is no monitoring from NSM. Locks created with this procedure should be released with the normal UNLOCK procedure.
+
+Because NLM has no way to detect client crashes while locks are in effect, the client should call FREE-ALL to release all the locks it may have held before the crash."))
+
+(defrpc call-free-all 23 
+  (:list :string :uint32)
+  :void
+  (:arg-transformer (name) (list name 0))
+  (:documentation "This procedure informs the server that the client NAME has rebooted and that all file-sharing reservations and locks held by the client should be discarded."))
+
+
 
