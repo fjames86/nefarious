@@ -153,3 +153,41 @@
    (name filename3)))
 
 
+(defun pack-mode (&key owner group others)
+  (let ((m 0))
+    (dolist (o owner)
+      (setf m
+            (logior m (ecase o
+                        (:read #x00100)
+                        (:write #x00080)
+                        (:execute #x00040)))))
+    (dolist (g group)
+      (setf m 
+            (logior m (ecase g 
+                        (:read #x00020)
+                        (:write #x00010)
+                        (:execute #x00008)))))
+    (dolist (o others)
+      (setf m 
+            (logior m (ecase o
+                        (:read #x00004)
+                        (:write #x00002)
+                        (:execute #x00001)))))
+    m))
+
+(defun unpack-mode (mode)
+  (list :owner (mapcan (lambda (name val)
+                         (when (logand val mode)
+                           (list name)))
+                       '(:read :write :execute)
+                       '(#x00100 #x00080 #x00040))
+        :group (mapcan (lambda (name val)
+                         (when (logand val mode)
+                           (list name)))
+                       '(:read :write :execute)
+                       '(#x00020 #x00010 #x00008))
+        :others (mapcan (lambda (name val)
+                          (when (logand val mode)
+                            (list name)))
+                        '(:read :write :execute)
+                        '(#x00004 #x00002 #x00001))))

@@ -39,6 +39,8 @@
 	  #:make-fs-stat
 	  #:path-conf
 	  #:make-path-conf
+      #:pack-mode
+      #:unpack-mode
 
 	  ;; errors
 	  #:nfs-error

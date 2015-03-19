@@ -211,7 +211,11 @@ be a string naming the mount-point that is exported by NFS."
 	  (make-fattr3 :type (if (handle-directory-p handle)
 				 :dir
 				 :reg)
-		       :mode #x666666 ;; FIXME: what should go here?
+		       :mode (pack-mode :owner (if (handle-directory-p handle)
+                                           '(:read :write :execute)
+                                           '(:read :write))
+                                :group '(:read :write)
+                                :others '(:read))
 		       :uid 1000
 		       :gid 1000
 		       :size (or (nefarious.finfo:file-information-size info) 0)
