@@ -12,7 +12,12 @@
 ;;; we'd have to use actual platform-specific syscalls (flock, LockFileEx) 
 ;;; to do the lockings. 
 ;;;
-;;;
+
+;; Don't include in the build yet because it doesn't work.
+;; Need to install handlers for the RPCs and a mechanism for notifying 
+;; clients when their lock requests were granted/denied. 
+;;
+
 
 (defpackage #:nefarious.nlm
   (:use #:cl #:frpc)

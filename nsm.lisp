@@ -1,11 +1,13 @@
 ;;;; Copyright (c) Frank James 2015 <frank.a.james@gmail.com>
 ;;;; This code is licensed under the MIT license.
 
-;;; The Network State Manager protocol. Used to send notifications
+;;; The Network Status Monitor protocol. Used to send notifications
 ;;; to interested parties when we boot up, and to receive noticications
 ;;; from other hosts we are interested in.
-;;; Note: NSM needs to persist a seqno and a list of server names to send 
-;;; state notifications to. The file is named by *default-nsm-pathspec*.
+
+;; Note: NSM needs to persist a seqno and a list of server names to send 
+;; state notifications to. The default file is *default-nsm-pathspec*.
+
 
 (defpackage #:nefarious.nsm
   (:use #:cl #:frpc)
@@ -15,7 +17,7 @@
            #:*default-nsm-pathspec*
            #:load-nsm-state
            #:save-nsm-state 
-	   #:init-nsm
+           #:init-nsm
 
            ;; rpcs  
            #:call-null
