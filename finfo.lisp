@@ -166,50 +166,72 @@
 #-(or windows win32)
 (progn
 
-(defctype time-t 
-    #+(or x86-64 x64 amd64):uint64 
-    #-(or x86-64 x64 amd64):uint32)
-
-(defcstruct stat-info
-  (inode :uint32)
-  (mode :uint32)
-  (nlink :uint32)
-  (uid :uint32)
-  (gid :uint32)
-  (dev :uint32)
-  (size time-t)
-  (blksize :uint32)
-  (blkcnt :uint32)
-  (atime time-t)
-  (mtime time-t)
-  (ctime time-t)) ;; file change time 
-
-(defcfun (%lstat "lstat")
-    :int32
-  (path :string)
-  (stat :pointer))
+;; should probably ffi out to lstat here but I can't be arsed to make it work.
+;; just use the CL functions instead
 
 (defun get-file-information (pathspec)
   (let ((info (make-file-information)))
     (flet ((getinfo ()
-	     (with-foreign-string (s (format nil "~A" (truename pathspec)))
-	       (with-foreign-object (i '(:struct stat-info))
-		 (let ((res (%lstat s i)))
-		   (cond
-		     ((zerop res)
-		      (setf (file-information-ctime info)
-			    (foreign-slot-value i '(:struct stat-info) 'ctime)
-			    (file-information-atime info)
-			    (foreign-slot-value i '(:struct stat-info) 'atime)
-			    (file-information-mtime info)
-			    (foreign-slot-value i '(:struct stat-info) 'mtime)
-			    (file-information-size info)
-			    (foreign-slot-value i '(:struct stat-info) 'size)))
-		     (t nil)))))))
+             (let* ((path (truename pathspec))
+                    (time (- (file-write-date path)
+                             #.(encode-universal-time 0 0 0 1 1 1970))))
+               (setf (file-information-size info)
+                     (with-open-file (f path :direction :input) (file-length f))
+                     (file-information-ctime info)
+                     time
+                     (file-information-atime info)
+                     time
+                     (file-information-mtime info)
+                     time))))
       (handler-case (getinfo)
-	(error (e)
-	  (log:debug "~A" e)))
+        (error (e)
+          (log:debug "~A" e)))
       info)))
+
+;;(defctype time-t
+;;    #+(or x86-64 x64 amd64):uint64
+;;    #-(or x86-64 x64 amd64):uint32)
+
+;;(defcstruct stat-info
+;;  (inode :uint32)
+;;  (mode :uint32)
+;;  (nlink :uint32)
+;;  (uid :uint32)
+;;  (gid :uint32)
+;;  (dev :uint32)
+;;  (size time-t)
+;;  (blksize :uint32)
+;;  (blkcnt :uint32)
+;;  (atime time-t)
+;;  (mtime time-t)
+;;  (ctime time-t)) ;; file change time
+
+;;(defcfun (%lstat "lstat")
+;;    :int32
+;;  (path :string)
+;;  (stat :pointer))
+
+;;(defun get-file-information (pathspec)
+;;  (let ((info (make-file-information)))
+;;    (flet ((getinfo ()
+;;       (with-foreign-string (s (format nil "~A" (truename pathspec)))
+;;         (with-foreign-object (i '(:struct stat-info))
+;;       (let ((res (%lstat s i)))
+;;         (cond
+;;           ((zerop res)
+;;            (setf (file-information-ctime info)
+;;              (foreign-slot-value i '(:struct stat-info) 'ctime)
+;;              (file-information-atime info)
+;;              (foreign-slot-value i '(:struct stat-info) 'atime)
+;;              (file-information-mtime info)
+;;              (foreign-slot-value i '(:struct stat-info) 'mtime)
+;;              (file-information-size info)
+;;              (foreign-slot-value i '(:struct stat-info) 'size)))
+;;           (t nil)))))))
+;;      (handler-case (getinfo)
+;;  (error (e)
+;;    (log:debug "~A" e)))
+;;      info)))
 
 )
 
