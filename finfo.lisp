@@ -121,8 +121,10 @@
   (info :pointer))
 
 (defun get-file-information (pathspec)
-  (let ((path (format nil "~A" (truename pathspec)))
+  (let ((path (format nil "~A" (truename pathspec)))        
 	(info (make-file-information)))
+    #+(or windows win32)(setf path (substitute #\\ #\/ path :test #'char=))
+    (log:debug "fileinfo: ~A" path)
     (flet ((getinfo ()
 	     (let ((handle (with-foreign-string (p path)
 			     (%create-file path 

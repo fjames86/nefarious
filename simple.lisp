@@ -259,6 +259,7 @@ be a string naming the mount-point that is exported by NFS."
 
 (defmethod nfs-provider-read ((provider simple-provider) fh offset count)
   "Read count bytes from offset from the object."
+  (log:debug "Read ~A:~A" offset count)
   (let ((handle (find-handle provider fh)))
     (if handle
 	(read-file handle offset count)
