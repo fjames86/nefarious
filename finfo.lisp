@@ -103,7 +103,7 @@
 	      #.(encode-universal-time 0 0 0 1 1 1970))))
 	(t (get-last-error))))))
 
-(cffi:defcstruct file-info
+(defcstruct file-info
   (attrs :uint32)
   (ctime (:struct filetime)) ;; file creation time
   (atime (:struct filetime))
@@ -115,31 +115,30 @@
   (index-high :uint32)
   (index-low :uint32))
 
-(cffi:defcfun (%get-file-information "GetFileInformationByHandle" :convention :stdcall)
+(defcfun (%get-file-information "GetFileInformationByHandle" :convention :stdcall)
     :boolean
   (handle :pointer)
   (info :pointer))
 
 (defun get-file-information (pathspec)
-  (let ((path (format nil "~A" (truename pathspec)))        
-	(info (make-file-information)))
-    #+(or windows win32)(setf path (substitute #\\ #\/ path :test #'char=))
+  (let ((path (substitute #\\ #\/ (format nil "~A" (truename pathspec))))
+        (info (make-file-information)))
     (log:debug "fileinfo: ~A" path)
     (flet ((getinfo ()
 	     (let ((handle (with-foreign-string (p path)
 			     (%create-file path 
 					   #x10000000 ;; generic all
 					   0 ;; exclusive
-					   (cffi:null-pointer)
+					   (null-pointer)
 					   4 ;; open always
 					   0 
-					   (cffi:null-pointer)))))
+					   (null-pointer)))))
 	       (when (pointer-eq handle 
 				 (make-pointer #+(or x86-64 x64 amd64)#xffffffffffffffff
 					       #-(or x86-64 x64 amd64)#xffffffff))
 		 (get-last-error))
 	       (unwind-protect 
-		    (cffi:with-foreign-object (i '(:struct file-info))
+		    (with-foreign-object (i '(:struct file-info))
 		      (let ((res (%get-file-information handle i)))
 			(cond
 			  (res

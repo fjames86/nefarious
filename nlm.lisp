@@ -3,7 +3,6 @@
 
 ;;; Codes to implement the Network Lock Manager (NLM) protocol
 ;;; This is used to implement a form a file locking for NFS.
-;;; Unfortunately NLM seems to be a very poorly documented protocol.
 ;;; 
 ;;; We can safely assume that the RPC server is singly-threaded, because 
 ;;; these handlers are only expected to be executed by the nefarious RPC 
@@ -12,6 +11,8 @@
 ;;; process on the local host machine to be accessing the files. Otherwise
 ;;; we'd have to use actual platform-specific syscalls (flock, LockFileEx) 
 ;;; to do the lockings. 
+;;;
+;;;
 
 (defpackage #:nefarious.nlm
   (:use #:cl #:frpc)
@@ -118,12 +119,14 @@
    (:write-only 2)
    (:read-write 3)))
 
+;; making the lock, holder and share structures into plists might be nicer
+;; don't have to export all the slot accessors that way
 (defxstruct nlm-lock ()
   ((name :string)
    (fh netobj)
    (oh netobj)
    (uppid :int32)
-   (offset :uint64)
+   (offset :uint64) ;; it's unclear whether these are 64 or 32 bit
    (len :uint64)))
 
 (defxstruct nlm-holder ()
@@ -137,8 +140,8 @@
   ((name :string)
    (fh netobj)
    (oh netobj)
-   (mode fsh4-mode)
-   (access fsh4-mode)))
+   (mode fsh-mode)
+   (access fsh-access)))
 
 ;; --------------------------------
 

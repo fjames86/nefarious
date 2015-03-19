@@ -154,6 +154,7 @@
 
 
 (defun pack-mode (&key owner group others)
+  "Pack the ownership rights into an integer. OWNER, GROUP and OTHERS should be lists of the symbols :READ, :WRITE, :EXECUTE."
   (let ((m 0))
     (dolist (o owner)
       (setf m
@@ -176,6 +177,7 @@
     m))
 
 (defun unpack-mode (mode)
+  "Unpack the MODE into owner, group and others rights. Returns a plist with properties :OWNER, :GROUP and :OTHERS."
   (list :owner (mapcan (lambda (name val)
                          (when (logand val mode)
                            (list name)))

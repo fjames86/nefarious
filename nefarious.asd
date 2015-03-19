@@ -21,4 +21,3 @@
    (:file "simple" :depends-on ("streams" "finfo")))
   :depends-on (:frpc :cl-fad :trivial-gray-streams :cffi))
 
-
