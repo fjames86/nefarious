@@ -216,6 +216,7 @@ be a string naming the mount-point that is exported by NFS."
                                            '(:read :write))
                                 :group '(:read :write)
                                 :others '(:read))
+		       :nlink 1
 		       :uid 1000
 		       :gid 1000
 		       :size (or (nefarious.finfo:file-information-size info) 0)

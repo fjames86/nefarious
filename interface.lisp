@@ -141,7 +141,7 @@
 (defun unpack-nfs-access (access)
   (declare (type fixnum access))
   (mapcan (lambda (sym)
-	    (when (logand access (enum 'nfs-access sym))
+	    (unless (zerop (logand access (enum 'nfs-access sym)))
 	      (list sym)))
 	  '(:read :lookup :modify :extend :delete :execute)))
 
@@ -246,10 +246,12 @@ of NFS-ACCESS flag symbols. Returns (values post-op-attr access"))
 				  bytes)))
 	   (nfs-error (e)
 	     (log:debug "~A" e)
-	     (make-xunion (nfs-error-stat e) nil))
+	     (make-xunion (nfs-error-stat e) 
+			  (nfs-provider-attrs provider handle)))
 	   (error (e)
 	     (log:debug "~A" e)
-	     (make-xunion :server-fault nil))))
+	     (make-xunion :server-fault
+			  (nfs-provider-attrs provider handle)))))
 	(provider 
 	 (make-xunion :access nil))
 	(t
@@ -289,17 +291,17 @@ of NFS-ACCESS flag symbols. Returns (values post-op-attr access"))
 			    (list (make-wcc-data)
 				  n
 				  :file-sync
-				  nil)))
+				  (make-write-verf3))))
 	   (nfs-error (e)
 	     (log:debug "~A" e)
-	     (make-xunion (nfs-error-stat e) nil))
+	     (make-xunion (nfs-error-stat e) (make-wcc-data)))
 	   (error (e)
 	     (log:debug "~A" e)
-	     (make-xunion :server-fault nil))))
+	     (make-xunion :server-fault (make-wcc-data)))))
 	(provider 
-	 (make-xunion :access nil))
+	 (make-xunion :access (make-wcc-data)))
 	(t 
-	 (make-xunion :bad-handle nil))))))
+	 (make-xunion :bad-handle (make-wcc-data)))))))
 
 ;; ------------------------------------------------------
 ;; create -- create a file
