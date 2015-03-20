@@ -125,12 +125,12 @@
 ;; ACCESS3res NFSPROC3_ACCESS(ACCESS3args)           = 4;
 
 (defxenum nfs-access
- ((:read #x0001)
-  (:lookup #x0002)
-  (:modify #x0004)
-  (:extend #x0008)
-  (:delete #x0010)
-  (:execute #x0020)))
+ (:read #x0001)
+ (:lookup #x0002)
+ (:modify #x0004)
+ (:extend #x0008)
+ (:delete #x0010)
+ (:execute #x0020))
 
 (defun pack-nfs-access (access)
   (do ((i 0)
@@ -260,9 +260,9 @@ of NFS-ACCESS flag symbols. Returns (values post-op-attr access"))
 ;; WRITE3res NFSPROC3_WRITE(WRITE3args)             = 7;
 
 (defxenum stable-how 
-  ((:unstable 0)
-   (:data-sync 1)
-   (:file-sync 2)))
+ (:unstable 0)
+ (:data-sync 1)
+ (:file-sync 2))
 
 (defrpc call-write 7 
   (:list nfs-fh3 offset3 count3 stable-how (:varray* :octet))
@@ -306,9 +306,9 @@ of NFS-ACCESS flag symbols. Returns (values post-op-attr access"))
 ;; CREATE3res NFSPROC3_CREATE(CREATE3args)           = 8;
 
 (defxenum create-mode3 
-  ((:unchecked 0)
-   (:guarded 1)
-   (:exclusive 2)))
+  (:unchecked 0)
+  (:guarded 1)
+  (:exclusive 2))
 
 (defrpc call-create 8 
   (:list dir-op-args3 
@@ -681,17 +681,17 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
 ;; read dir -- read from a directory 
 
 (defxstruct entry3 ()
-  ((fileid fileid3)
-   (name filename3)
-   (cookie cookie3 0)))
+  (fileid fileid3)
+  (name filename3)
+  (cookie cookie3 0))
 
 (defxstruct %entry3 ()
-  ((entry entry3)
-   (next-entry (:optional %entry3))))
+  (entry entry3)
+  (next-entry (:optional %entry3)))
 
 (defxstruct dir-list3 ()
-  ((entries (:optional %entry3))
-   (eof :boolean)))
+  (entries (:optional %entry3))
+  (eof :boolean))
 
 ;; READDIR3res NFSPROC3_READDIR(READDIR3args)         = 16;
 (defrpc call-read-dir 16 
@@ -748,19 +748,19 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
 ;; read dir plus -- extended read from directory 
 
 (defxstruct entry3-plus ()
-  ((fileid fileid3)
-   (name filename3)
-   (cookie cookie3 0)
-   (attrs post-op-attr)
-   (handle post-op-fh3)))
+  (fileid fileid3)
+  (name filename3)
+  (cookie cookie3 0)
+  (attrs post-op-attr)
+  (handle post-op-fh3))
 
 (defxstruct %entry3-plus ()
-  ((entry entry3-plus)
-   (next-entry (:optional %entry3-plus))))
+  (entry entry3-plus)
+  (next-entry (:optional %entry3-plus)))
 
 (defxstruct dir-list3-plus ()
-  ((entries (:optional %entry3-plus))
-   (eof :boolean)))
+  (entries (:optional %entry3-plus))
+  (eof :boolean))
 
 ;; READDIRPLUS3res NFSPROC3_READDIRPLUS(READDIRPLUS3args) = 17;
 (defrpc call-read-dir-plus 17 
@@ -824,14 +824,14 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
 ;; fs stat -- get dynamic filesystem info
 
 (defxstruct fs-stat ()
-  ((attrs post-op-attr)
-   (tbytes size3 0)
-   (fbytes size3 0)
-   (abytes size3 0)
-   (tfiles size3 0)
-   (ffiles size3 0)
-   (afiles size3 0)
-   (invarsec :uint32 0)))
+  (attrs post-op-attr)
+  (tbytes size3 0)
+  (fbytes size3 0)
+  (abytes size3 0)
+  (tfiles size3 0)
+  (ffiles size3 0)
+  (afiles size3 0)
+  (invarsec :uint32 0))
 
 ;; FSSTAT3res NFSPROC3_FSSTAT(FSSTAT3args)           = 18;
 (defrpc call-fs-stat 18 
@@ -860,23 +860,23 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
 ;; fs info -- get static file system info
 
 (defxenum nfs-info 
-  ((:link #x0001)
-   (:symlink #x0002)
-   (:homogenous #x0008)
-   (:cansettime #x0010)))
+  (:link #x0001)
+  (:symlink #x0002)
+  (:homogenous #x0008)
+  (:cansettime #x0010))
 
 (defxstruct fs-info ()
-  ((attrs post-op-attr)
-   (rtmax :uint32)
-   (rtpref :uint32)
-   (rtmult :uint32)
-   (wtmax :uint32)
-   (wtpref :uint32)
-   (wtmult :uint32)
-   (dtpref :uint32)
-   (max-fsize size3 0)
-   (time-delta nfs-time3 (make-nfs-time3))
-   (properties :uint32 0)))
+  (attrs post-op-attr)
+  (rtmax :uint32)
+  (rtpref :uint32)
+  (rtmult :uint32)
+  (wtmax :uint32)
+  (wtpref :uint32)
+  (wtmult :uint32)
+  (dtpref :uint32)
+  (max-fsize size3 0)
+  (time-delta nfs-time3 (make-nfs-time3))
+  (properties :uint32 0))
 
 ;; FSINFO3res NFSPROC3_FSINFO(FSINFO3args)           = 19;
 (defrpc call-fs-info 19 
@@ -905,13 +905,13 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
 ;; pstconf -- retrieve posix information
 
 (defxstruct path-conf ()
-  ((attr post-op-attr)
-   (link-max :uint32)
-   (name-max :uint32)
-   (no-trunc :boolean)
-   (chown-restricted :boolean)
-   (case-insensitive :boolean)
-   (case-preserving :boolean)))
+  (attr post-op-attr)
+  (link-max :uint32)
+  (name-max :uint32)
+  (no-trunc :boolean)
+  (chown-restricted :boolean)
+  (case-insensitive :boolean)
+  (case-preserving :boolean))
 
 ;; PATHCONF3res NFSPROC3_PATHCONF(PATHCONF3args)       = 20;
 (defrpc call-path-conf 20 

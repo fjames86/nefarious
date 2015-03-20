@@ -33,16 +33,16 @@
 (defxtype* name () :string)
 
 (defxenum mount-stat3 
-  ((:ok 0)
-   (:perm 1)
-   (:noent 2)
-   (:io 5)
-   (:access 13)
-   (:notdir 20)
-   (:inval 22)
-   (:name-too-long 63)
-   (:not-supp 10004)
-   (:server-fault 10006)))
+  (:ok 0)
+  (:perm 1)
+  (:noent 2)
+  (:io 5)
+  (:access 13)
+  (:notdir 20)
+  (:inval 22)
+  (:name-too-long 63)
+  (:not-supp 10004)
+  (:server-fault 10006))
 
 (define-condition mount-error (error)
   ((stat :initarg :stat :initform nil :reader mount-error-stat))
@@ -98,8 +98,8 @@
 	  :directory dir-path))
 
 (defxstruct mount-body ()
-  ((mount mounting)
-   (next mount-list)))
+  (mount mounting)
+  (next mount-list))
 
 (defrpc call-dump 2 :void mount-list
   (:transformer (res)
@@ -157,15 +157,15 @@
 (defxtype* groups () (:optional group-node))
 
 (defxstruct group-node ()
-  ((name name)
-   (next groups)))
+  (name name)
+  (next groups))
 
 (defxtype* exports () (:optional export-node))
 
 (defxstruct export-node ()
-  ((dir dir-path)
-   (groups groups)
-   (next exports)))
+  (dir dir-path)
+  (groups groups)
+  (next exports))
 
 (defrpc call-export 5 :void exports
   (:transformer (res)

@@ -101,52 +101,52 @@
   (nibbles:make-octet-vector +max-netobj+))
 
 (defxenum nlm-stat
-  ((:granted 0)
-   (:denied 1)
-   (:denied-no-locks 2)
-   (:blocked 3)
-   (:denied-grace-period 4)
-   (:deadlock 5)
-   (:rofs 6)
-   (:stale-fh 7)
-   (:fbig 8)
-   (:failed 9)))
+  (:granted 0)
+  (:denied 1)
+  (:denied-no-locks 2)
+  (:blocked 3)
+  (:denied-grace-period 4)
+  (:deadlock 5)
+  (:rofs 6)
+  (:stale-fh 7)
+  (:fbig 8)
+  (:failed 9))
 
 (defxenum fsh-mode 
-  ((:deny-none 0)
-   (:deny-read 1)
-   (:deny-write 2)
-   (:deny-rw 3)))
+  (:deny-none 0)
+  (:deny-read 1)
+  (:deny-write 2)
+  (:deny-rw 3))
 
 (defxenum fsh-access 
-  ((:none 0)
-   (:read-only 1)
-   (:write-only 2)
-   (:read-write 3)))
+  (:none 0)
+  (:read-only 1)
+  (:write-only 2)
+  (:read-write 3))
 
 ;; making the lock, holder and share structures into plists might be nicer
 ;; don't have to export all the slot accessors that way
 (defxstruct nlm-lock ()
-  ((name :string)
-   (fh netobj)
-   (oh netobj)
-   (uppid :int32)
-   (offset :uint64) ;; it's unclear whether these are 64 or 32 bit
-   (len :uint64)))
+  (name :string)
+  (fh netobj)
+  (oh netobj)
+  (uppid :int32)
+  (offset :uint64) ;; it's unclear whether these are 64 or 32 bit
+  (len :uint64))
 
 (defxstruct nlm-holder ()
-  ((exclusive :boolean)
-   (id :int32)
-   (oh netobj)
-   (offset :uint64)
-   (len :uint64)))
+  (exclusive :boolean)
+  (id :int32)
+  (oh netobj)
+  (offset :uint64)
+  (len :uint64))
 
 (defxstruct nlm-share ()
-  ((name :string)
-   (fh netobj)
-   (oh netobj)
-   (mode fsh-mode)
-   (access fsh-access)))
+  (name :string)
+  (fh netobj)
+  (oh netobj)
+  (mode fsh-mode)
+  (access fsh-access))
 
 ;; --------------------------------
 

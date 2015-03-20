@@ -39,18 +39,18 @@
 
 ;; return status
 (defxenum stat 
-  ((:success 0)
-   (:fail 1)))
+  (:success 0)
+  (:fail 1))
 
 ;; combination of a return status and the state number
 (defxtype* stat-res () (:list stat :int32)) ;; stat state
 
 ;; Callback info: ID of client to send notifications back to.
 (defxstruct my-id ()
-  ((name :string) ;; hostname of client 
-   (program :int32)
-   (version :int32)
-   (proc :int32)))
+  (name :string) ;; hostname of client 
+  (program :int32)
+  (version :int32)
+  (proc :int32))
 
 ;; -----------------------------------------
 
@@ -105,8 +105,8 @@
   "The current state number.")
 
 (defxstruct nsm-state ((:reader read-nsm-state) (:writer write-nsm-state))
-  ((state :int32 0)
-   (servers (:varray :string))))
+  (state :int32 0)
+  (servers (:varray :string)))
 
 (defun save-nsm-state (&optional pathspec)
   "Save the local state number and list of notification servers to a data file."
