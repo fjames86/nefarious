@@ -81,25 +81,29 @@
   (:sock 6)
   (:fifo 7))
 
-(defxstruct specdata3 ()
-  (data1 :uint32)
-  (data2 :uint32))
+(defxtype* specdata3 () (:list :uint32 :uint32))
+;;(defxstruct specdata3 ()
+;;  (data1 :uint32)
+;;  (data2 :uint32))
 
 (defxtype* nfs-fh3 () (:varray* :octet +nfs-fh-size+))
 
-(defxstruct nfs-time3 ()
-  (seconds :uint32)
-  (nseconds :uint32))
+(defxtype* nfs-time3 () (:plist :seconds :uint32 :nseconds :uint32))
+(defun make-nfs-time3 (&key (seconds 0) (nseconds 0))
+  (list :seconds seconds :nseconds nseconds))
+;;(defxstruct nfs-time3 ()
+;;  (seconds :uint32)
+;;  (nseconds :uint32))
 
 (defxstruct fattr3 ()
   (type ftype3 :reg)
   (mode mode3 0)
-  (nlink :uint32)
+  (nlink :uint32 1)
   (uid uid3 0)
   (gid gid3 0)
   (size size3 0)
   (used size3 0)
-  (rdev specdata3 (make-specdata3))
+  (rdev specdata3 '(0 0))
   (fsid :uint64)
   (fileid fileid3 0)
   (atime nfs-time3 (make-nfs-time3))
@@ -108,17 +112,31 @@
 
 (defxtype* post-op-attr () (:optional fattr3))
 
-(defxstruct wcc-attr ()
-  (size size3 0)
-  (mtime nfs-time3 (make-nfs-time3))
-  (ctime nfs-time3 (make-nfs-time3)))
+(defxtype* wcc-attr () 
+  (:plist :size size3 
+	  :mtime nfs-time3
+	  :ctime nfs-time3))
+;;(defxstruct wcc-attr ()
+;;  (size size3 0)
+;;  (mtime nfs-time3 (make-nfs-time3))
+;;  (ctime nfs-time3 (make-nfs-time3)))
 
 (defxtype* pre-op-attr () (:optional wcc-attr))
 
 ;; weak cache consistency data.
-(defxstruct wcc-data ()
-  (before pre-op-attr)
-  (after post-op-attr))
+(defxtype* wcc-data ()
+  (:plist :before pre-op-attr 
+	  :after post-op-attr))
+;;(defxstruct wcc-data ()
+;;  (before pre-op-attr)
+;;  (after post-op-attr))
+(defun make-wcc-data (&key attrs old-attrs)
+  (list :before (if old-attrs
+		    (list :size (fattr3-size old-attrs)
+			  :mtime (fattr3-mtime old-attrs)
+			  :ctime (fattr3-ctime old-attrs))
+		    (list :size 0 :mtime (make-nfs-time3) :ctime (make-nfs-time3)))
+	:after attrs))
 
 (defxtype* post-op-fh3 () (:optional nfs-fh3))
 

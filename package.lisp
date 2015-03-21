@@ -29,18 +29,13 @@
 	  #:call-commit
 
 	  ;; some of the essential NFS structures
-	  #:fattr3
 	  #:make-fattr3
-	  #:nfs-time3
 	  #:make-nfs-time3
-	  #:fs-info
 	  #:make-fs-info
-	  #:fs-stat
 	  #:make-fs-stat
-	  #:path-conf
 	  #:make-path-conf
-      #:pack-mode
-      #:unpack-mode
+	  #:pack-mode
+	  #:unpack-mode
 
 	  ;; errors
 	  #:nfs-error
@@ -56,7 +51,6 @@
 	  ;; client streams
 	  #:nfs-file-stream
 	  #:make-nfs-file-stream
-
 
 	  ;; providers
 	  #:nfs-provider

@@ -214,14 +214,14 @@ be a string naming the mount-point that is exported by NFS."
 		       :mode (pack-mode :owner (if (handle-directory-p handle)
                                            '(:read :write :execute)
                                            '(:read :write))
-                                :group '(:read :write)
-                                :others '(:read))
-		       :nlink 1
+					:group '(:read :write)
+					:others '(:read))
+		       :nlink (nefarious.finfo:file-information-nlinks info)
 		       :uid 1000
 		       :gid 1000
 		       :size (or (nefarious.finfo:file-information-size info) 0)
 		       :used (or (nefarious.finfo:file-information-size info) 0)
-		       :fileid 0
+		       :fileid (unpack-fh (handle-fh handle))
 		       :atime (make-nfs-time3 :seconds (or (nefarious.finfo:file-information-atime info) 0))
 		       :mtime (make-nfs-time3 :seconds (or (nefarious.finfo:file-information-mtime info) 0))
 		       :ctime (make-nfs-time3 :seconds (or (nefarious.finfo:file-information-ctime info) 0))))

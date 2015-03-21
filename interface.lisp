@@ -7,6 +7,9 @@
   (member client (provider-clients provider)
 	  :test #'equalp))
 
+(defun maybe-provider-attrs (provider handle)
+  (ignore-errors (nfs-provider-attrs provider handle)))
+
 (use-rpc-program +nfs-program+ +nfs-version+)
 (use-rpc-host '*rpc-host* 2049)
 
@@ -65,13 +68,22 @@
     (destructuring-bind (provider handle) (fh-provider-handle fh)
       (cond 
 	((and provider (client-mounted-p provider *rpc-remote-host*))
-	 (handler-case 
-	     (progn 
-	       (setf (nfs-provider-attrs provider handle) new-attrs)
-	       (make-xunion :ok (make-wcc-data)))
-	   (error (e)
-	     (log:debug "~A" e)
-	     (make-xunion :access (make-wcc-data)))))
+	 (let ((attrs (maybe-provider-attrs provider handle)))
+	   (handler-case 
+	       (progn
+		 (setf (nfs-provider-attrs provider handle) new-attrs)
+		 (make-xunion :ok (make-wcc-data :attrs (maybe-provider-attrs provider handle)
+						 :old-attrs attrs)))
+	     (nfs-error (e)
+	       (log:debug "~A" e)
+	       (make-xunion (nfs-error-stat e)
+			    (make-wcc-data :attrs (maybe-provider-attrs provider handle)
+					   :old-attrs attrs)))
+	     (error (e)
+	       (log:debug "~A" e)
+	       (make-xunion :server-fault
+			    (make-wcc-data :attrs (maybe-provider-attrs provider handle)
+					   :old-attrs attrs))))))
 	(provider
 	 ;; client not mounted 
 	 (make-xunion :access (make-wcc-data)))
@@ -285,19 +297,25 @@ of NFS-ACCESS flag symbols. Returns (values post-op-attr access"))
     (destructuring-bind (provider handle) (fh-provider-handle fh)
       (cond
 	((and provider (client-mounted-p provider *rpc-remote-host*))
-	 (handler-case 
-	     (let ((n (nfs-provider-write provider handle offset data)))
-	       (make-xunion :ok 
-			    (list (make-wcc-data)
-				  n
-				  :file-sync
-				  (make-write-verf3))))
-	   (nfs-error (e)
-	     (log:debug "~A" e)
-	     (make-xunion (nfs-error-stat e) (make-wcc-data)))
-	   (error (e)
-	     (log:debug "~A" e)
-	     (make-xunion :server-fault (make-wcc-data)))))
+	 (let ((attrs (maybe-provider-attrs provider handle)))
+	   (handler-case 
+	       (let ((n (nfs-provider-write provider handle offset data)))
+		 (make-xunion :ok 
+			      (list (make-wcc-data :attrs (maybe-provider-attrs provider handle)
+						   :old-attrs attrs)
+				    n
+				    :file-sync
+				    (make-write-verf3))))
+	     (nfs-error (e)
+	       (log:debug "~A" e)
+	       (make-xunion (nfs-error-stat e) 
+			    (make-wcc-data :attrs (maybe-provider-attrs provider handle)
+					   :old-attrs attrs)))
+	     (error (e)
+	       (log:debug "~A" e)
+	       (make-xunion :server-fault 
+			    (make-wcc-data :attrs (maybe-provider-attrs provider handle)
+					   :old-attrs attrs))))))
 	(provider 
 	 (make-xunion :access (make-wcc-data)))
 	(t 
@@ -342,18 +360,24 @@ of NFS-ACCESS flag symbols. Returns (values post-op-attr access"))
       (destructuring-bind (provider dh) (fh-provider-handle dir)
 	(cond
 	  ((and provider (client-mounted-p provider *rpc-remote-host*))
-	   (handler-case 
-	       (let ((handle (nfs-provider-create provider dh name)))
-		 (make-xunion :ok 
-			      (list (provider-handle-fh provider handle)
-				    (nfs-provider-attrs provider handle)
-				    (make-wcc-data))))
-	     (simple-error (e)
-	       (log:debug "~A" e)
-	       (make-xunion (nfs-error-stat e) (make-wcc-data)))
-	     (error (e)
-	       (log:debug "~A" e)
-	       (make-xunion :server-fault (make-wcc-data)))))
+	   (let ((attrs (maybe-provider-attrs provider dh)))
+	     (handler-case 
+		 (let ((handle (nfs-provider-create provider dh name)))
+		   (make-xunion :ok 
+				(list (provider-handle-fh provider handle)
+				      (nfs-provider-attrs provider handle)
+				      (make-wcc-data :attrs (maybe-provider-attrs provider dh)
+						     :old-attrs attrs))))
+	       (simple-error (e)
+		 (log:debug "~A" e)
+		 (make-xunion (nfs-error-stat e) 
+			      (make-wcc-data :attrs (maybe-provider-attrs provider dh)
+					     :old-attrs attrs)))
+	       (error (e)
+		 (log:debug "~A" e)
+		 (make-xunion :server-fault 
+			      (make-wcc-data :attrs (maybe-provider-attrs provider dh)
+					     :old-attrs attrs))))))
 	  (provider 
 	   (make-xunion :access (make-wcc-data)))
 	  (t 
@@ -385,18 +409,23 @@ of NFS-ACCESS flag symbols. Returns (values post-op-attr access"))
       (destructuring-bind (provider dh) (fh-provider-handle dir)
 	(cond
 	  ((and provider (client-mounted-p provider *rpc-remote-host*))
-	   (handler-case 
-	       (let ((handle (nfs-provider-create-dir provider dh name)))
-		 (make-xunion :ok 
-			      (list (provider-handle-fh provider handle)
-				    (nfs-provider-attrs provider handle)
-				    (make-wcc-data))))
-	     (nfs-error (e)
-	       (log:debug "~A" e)
-	       (make-xunion (nfs-error-stat e) (make-wcc-data)))
-	     (error (e)
-	       (log:debug "~A" e)
-	       (make-xunion :server-fault (make-wcc-data)))))
+	   (let ((attrs (maybe-provider-attrs provider dh)))
+	     (handler-case 
+		 (let ((handle (nfs-provider-create-dir provider dh name)))
+		   (make-xunion :ok 
+				(list (provider-handle-fh provider handle)
+				      (nfs-provider-attrs provider handle)
+				      (make-wcc-data :attrs (maybe-provider-attrs provider dh)
+						     :old-attrs attrs))))
+	       (nfs-error (e)
+		 (log:debug "~A" e)
+		 (make-xunion (nfs-error-stat e) 
+			      (make-wcc-data :attrs (maybe-provider-attrs provider dh)
+					     :old-attrs attrs)))
+	       (error (e)
+		 (log:debug "~A" e)
+		 (make-xunion :server-fault (make-wcc-data :attrs (maybe-provider-attrs provider dh)
+							   :old-attrs attrs))))))
 	  (provider 
 	   (make-xunion :access (make-wcc-data)))
 	  (t 
@@ -531,16 +560,23 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
     (destructuring-bind (provider dh) (fh-provider-handle dir)
       (cond
 	((and provider (client-mounted-p provider *rpc-remote-host*))
-	 (handler-case 
-	     (progn 
-	       (nfs-provider-remove provider dh name)
-	       (make-xunion :ok (make-wcc-data)))
-	   (nfs-error (e)
-	     (log:debug "~A" e)
-	     (make-xunion (nfs-error-stat e) (make-wcc-data)))
-	   (error (e)
-	     (log:debug "~A" e)
-	     (make-xunion :server-fault (make-wcc-data)))))
+	 (let ((attrs (maybe-provider-attrs provider dh)))
+	   (handler-case 
+	       (progn 
+		 (nfs-provider-remove provider dh name)
+		 (make-xunion :ok 
+			      (make-wcc-data :attrs (maybe-provider-attrs provider dh)
+					     :old-attrs attrs)))
+	     (nfs-error (e)
+	       (log:debug "~A" e)
+	       (make-xunion (nfs-error-stat e) 
+			    (make-wcc-data :attrs (maybe-provider-attrs provider dh)
+					   :old-attrs attrs)))
+	     (error (e)
+	       (log:debug "~A" e)
+	       (make-xunion :server-fault 
+			    (make-wcc-data :attrs (maybe-provider-attrs provider dh)
+					   :old-attrs attrs))))))
 	(provider 
 	 (make-xunion :access (make-wcc-data)))
 	(t 
@@ -569,16 +605,23 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
     (destructuring-bind (provider dh) (fh-provider-handle dir)
       (cond
 	((and provider (client-mounted-p provider *rpc-remote-host*))
-	 (handler-case 
-	     (progn
-	       (nfs-provider-remove-dir provider dh name)
-	       (make-xunion :ok (make-wcc-data)))
-	   (nfs-error (e)
-	     (log:debug "~A" e)
-	     (make-xunion (nfs-error-stat e) (make-wcc-data)))
-	   (error (e)
-	     (log:debug "~A" e)
-	     (make-xunion :server-fault (make-wcc-data)))))
+	 (let ((attrs (maybe-provider-attrs provider dh)))
+	   (handler-case 
+	       (progn
+		 (nfs-provider-remove-dir provider dh name)
+		 (make-xunion :ok 
+			      (make-wcc-data :attrs (maybe-provider-attrs provider dh)
+					     :old-attrs attrs)))
+	     (nfs-error (e)
+	       (log:debug "~A" e)
+	       (make-xunion (nfs-error-stat e) 
+			    (make-wcc-data :attrs (maybe-provider-attrs provider dh)
+					   :old-attrs attrs)))
+	     (error (e)
+	       (log:debug "~A" e)
+	       (make-xunion :server-fault 
+			    (make-wcc-data :attrs (maybe-provider-attrs provider dh)
+					   :old-attrs attrs))))))
 	(provider 
 	 (make-xunion :access (make-wcc-data)))
 	(t 
@@ -615,18 +658,30 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
 	(destructuring-bind (tprovider thandle) (fh-provider-handle tdh)
 	  (cond
 	    ((and fprovider tprovider (eq fprovider tprovider) (client-mounted-p fprovider *rpc-remote-host*))
-	     (handler-case 
-		 (progn
-		   (nfs-provider-rename fprovider fhandle fname thandle tname)
-		   (make-xunion :ok (list (make-wcc-data) (make-wcc-data))))
-	       (nfs-error (e)
-		 (log:debug "~A" e)
-		 (make-xunion (nfs-error-stat e) 
-			      (list (make-wcc-data) (make-wcc-data))))
-	       (error (e)
-		 (log:debug "~A" e)
-		 (make-xunion :server-fault 
-			      (list (make-wcc-data) (make-wcc-data))))))
+	     (let ((from-attrs (maybe-provider-attrs fprovider fhandle))
+		   (to-attrs (maybe-provider-attrs fprovider thandle)))
+	       (handler-case 
+		   (progn
+		     (nfs-provider-rename fprovider fhandle fname thandle tname)
+		     (make-xunion :ok 
+				  (list (make-wcc-data :attrs (maybe-provider-attrs fprovider fhandle)
+						       :old-attrs from-attrs)
+					(make-wcc-data :attrs (maybe-provider-attrs fprovider thandle)
+						       :old-attrs to-attrs))))
+		 (nfs-error (e)
+		   (log:debug "~A" e)
+		   (make-xunion (nfs-error-stat e)
+				(list (make-wcc-data :attrs (maybe-provider-attrs fprovider fhandle)
+						     :old-attrs from-attrs)
+				      (make-wcc-data :attrs (maybe-provider-attrs fprovider thandle)
+						     :old-attrs to-attrs))))
+		 (error (e)
+		   (log:debug "~A" e)
+		   (make-xunion :server-fault
+				(list (make-wcc-data :attrs (maybe-provider-attrs fprovider fhandle)
+						     :old-attrs from-attrs)
+				      (make-wcc-data :attrs (maybe-provider-attrs fprovider thandle)
+						     :old-attrs to-attrs)))))))
 	    ((and fprovider tprovider (eq fprovider tprovider))
 	     (make-xunion :access (list (make-wcc-data) (make-wcc-data))))
 	    (t 
@@ -734,13 +789,17 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
 							   :name name)
 				       :next-entry (dir-list3-entries dlist3)))))
 	       (make-xunion :ok 
-			    (list nil (make-cookie-verf3) dlist3)))
+			    (list (maybe-provider-attrs provider dhandle)
+				  (make-cookie-verf3)
+				  dlist3)))
 	   (nfs-error (e)
 	     (log:debug "~A" e)
-	     (make-xunion (nfs-error-stat e) nil))
+	     (make-xunion (nfs-error-stat e) 
+			  (maybe-provider-attrs provider dhandle)))
 	   (error (e)
 	     (log:debug "~A" e)
-	     (make-xunion :server-fault nil))))
+	     (make-xunion :server-fault 
+			  (maybe-provider-attrs provider dhandle)))))
 	(provider 
 	 (make-xunion :access nil))
 	(t 

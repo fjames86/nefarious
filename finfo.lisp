@@ -7,7 +7,8 @@
 	   #:file-information-ctime
 	   #:file-information-atime
 	   #:file-information-mtime
-	   #:file-information-size))
+	   #:file-information-size
+	   #:file-information-nlinks))
 
 (in-package #:nefarious.finfo)
 
@@ -16,7 +17,7 @@
 ;; such as access rights and a/c/m times
 
 (defstruct file-information
-  ctime atime mtime size)
+  ctime atime mtime size (nlinks 1))
 
 #+(or windows win32)
 (progn
@@ -146,6 +147,8 @@
 				 (+ (foreign-slot-value i '(:struct file-info) 'size-low)
 				    (ash (foreign-slot-value i '(:struct file-info) 'size-high)
 					 32))
+				 (file-information-nlinks info)
+				 (foreign-slot-value i '(:struct file-info) 'nlinks)
 				 (file-information-ctime info)
 				 (convert-time (foreign-slot-pointer i '(:struct file-info) 'ctime))
 				 (file-information-atime info)
