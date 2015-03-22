@@ -240,7 +240,10 @@ of NFS-ACCESS flag symbols. Returns (values post-op-attr access"))
   (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(destructuring-bind (attr count eof data) (xunion-val res)
-	  (declare (ignore count))
+;;	  (declare (ignore count))
+	  (unless (= count (length data))
+	    (error "Bytes returned ~A does not equal claimed count ~A" 
+		   (length data) count))
 	  (values data eof attr))
 	(error 'nfs-error :stat (xunion-tag res)))))
 
