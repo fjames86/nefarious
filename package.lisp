@@ -30,6 +30,20 @@
 
 	  ;; some of the essential NFS structures
 	  #:make-fattr3
+      #:fattr3-type
+      #:fattr3-mode
+      #:fattr3-nlink
+      #:fattr3-uid
+      #:fattr3-gid
+      #:fattr3-size
+      #:fattr3-used
+      #:fattr3-rdev
+      #:fattr3-fsid
+      #:fattr3-fileid
+      #:fattr3-atime 
+      #:fattr3-mtime 
+      #:fattr3-ctime 
+
 	  #:make-nfs-time3
 	  #:make-fs-info
 	  #:make-fs-stat
@@ -83,7 +97,7 @@
 	  #:nfs-provider-fs-info
 	  #:nfs-provider-fs-stat
 	  #:nfs-provider-path-conf
-	  #:nfs-provider-create-device 
+	  #:nfs-provider-create-device ;; this is for mknod
 	  #:nfs-provider-commit 
 
 	  ;; the simple (default) provider

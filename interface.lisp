@@ -297,6 +297,7 @@ of NFS-ACCESS flag symbols. Returns (values post-op-attr access"))
 	  (values count wverf wcc stable))
 	(error 'nfs-error :stat (xunion-tag res)))))
 
+;; FIXME: we should do something with the STABLE parameter. 
 (defhandler %handle-write (args 7)
   (destructuring-bind (fh offset count stable data) args
     (declare (ignore stable count))

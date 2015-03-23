@@ -6,8 +6,10 @@
 
 ;; This file defines the interface that NFS providers should implement
 
-(defvar *provider-id* 0)
-(defparameter *providers* nil)
+(defvar *provider-id* 0 
+  "The ID to use for the next provider. Constantly increasing integer.")
+(defparameter *providers* nil
+  "List of registered providers.")
 
 (defclass nfs-provider ()
   ((id :initform (prog1 *provider-id* (incf *provider-id*)) :accessor provider-id)
@@ -48,9 +50,6 @@
       (setf *providers* (remove provider *providers*)))))
 
 ;; for the external handles we prepend the provider ID so we know who to dispatch to
-;;(defxtype* provider-fh ((:reader read-provider-fh) (:writer write-provider-fh))
-;;  (:list :uint32 (:varray* :octet)))
-
 (defun fh-provider-handle (fh)
   "Convert an external NFS handle to an internal provider handle."
   (handler-case 
@@ -76,13 +75,14 @@
   (error 'nfs-error :stat :access))
 
 (defgeneric nfs-provider-unmount (provider client)
-  (:documentation "Unmount a client."))
+  (:documentation "Unmount a client. No meaningful return value."))
 (defmethod nfs-provider-unmount ((provider nfs-provider) client)
   (error 'nfs-error :stat :access))
 
 ;; for nfs
 (defgeneric nfs-provider-attrs (provider handle)
-  (:documentation "Optionally returns the FATTR3 structure for the handle object."))
+  (:documentation "Optionally returns the FATTR3 structure for the handle object. 
+Providers should always return the attributes for the handle if possible."))
 (defmethod nfs-provider-attrs ((provider nfs-provider) handle)
   (error 'nfs-error :stat :access))
 
@@ -92,13 +92,14 @@
   (error 'nfs-error :stat :access))
 
 (defgeneric nfs-provider-lookup (provider dhandle name)
-  (:documentation "Find the handle for an object."))
+  (:documentation "Find the handle for an object. 
+Returns the NFS handle for the object specified by NAME that lives in the directory specified by DHANDLE."))
 (defmethod nfs-provider-lookup ((provider nfs-provider) dhandle name)
   (error 'nfs-error :stat :access))
 
 (defgeneric nfs-provider-access (provider handle access)
   (:documentation "Checks the access privileges for the object. ACCESS shouild be a list of NFS-ACCESS enum symbols.
-Returns a list of the valid access privileges."))
+Returns a list of the valid access privileges, which should be a subset of the flags passed in."))
 (defmethod nfs-provider-access ((provider nfs-provider) handle access)
   (error 'nfs-error :stat :access))
 
@@ -122,7 +123,7 @@ created symlink."))
 
 ;; general file operators
 (defgeneric nfs-provider-read (provider handle offset count)
-  (:documentation "Read count bytes from offset from the object. Returns (values bytes eof)."))
+  (:documentation "Read count bytes from offset from the object. Returns (values bytes eof). EOF should be non-nil if the read finished at the end of the file. If OFFSET + COUNT is larger than the file, then a short read should be returned and EOF set to T. Providers are also free to do short reads at any time, in this case EOF should be nil. It is the NFS client's responsbility to issue further read instructions."))
 (defmethod nfs-provider-read ((provider nfs-provider) handle offset count)
   (error 'nfs-error :stat :access))
 
@@ -153,7 +154,7 @@ created symlink."))
   (error 'nfs-error :stat :access))
 
 (defgeneric nfs-provider-create-dir (provider dhandle name)
-  (:documentation "Create a new directory."))
+  (:documentation "Create a new directory. Returns the handle for the newly created directory."))
 (defmethod nfs-provider-create-dir ((provider nfs-provider) dhandle offset)
   (error 'nfs-error :stat :access))
 
@@ -164,7 +165,7 @@ created symlink."))
 
 ;; special device files
 (defgeneric nfs-provider-create-device (provider type dhandle name &key attrs specdata)
-  (:documentation "Create a special device. Type should be an ftype3 enum."))
+  (:documentation "Create a special device. Type should be an ftype3 enum. Returns the handle for the newly created device."))
 (defmethod nfs-provider-create-device ((provider nfs-provider) type dhandle name &key attrs specdata)
   (declare (ignore attrs specdata))
   (error 'nfs-error :stat :access))
