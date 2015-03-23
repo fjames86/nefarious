@@ -92,9 +92,13 @@ It listens on ports 111, 635 and 2049 (TCP and UDP).
 Run the server using:
 
 ```
+;; if running on systems without a port mapper (such as Windows)
 (nfs:start)
 
 (nfs:stop)
+
+;; if running on systems with a port mapper program (such as Linux)
+(nfs:start :port-mapper nil)
 ```
 
 Mount from Linux using the typical command,
@@ -104,7 +108,16 @@ $ ls -l /media/nfs
 $ umount /media/nfs 
 ```
 
-## 4. Notes
+## 4. Network status Monitor
+
+The NSM protocol is implemented. Clients should register to receive notifications 
+of state changes in remote hosts by providing a callback function. The callback will be executed 
+when the status change is received.
+
+The local server must also persist a state sequence number. By default nefarious uses the file named by 
+*default-nsm-pathspec*. You should ensure this has been set before starting the nefarious server. 
+
+## 5. Notes
 
 Nefarious is based on [frpc](https://github.com/fjames86/frpc), the underlying ONC-RPC implementation.
 
@@ -116,7 +129,15 @@ The NSM protocol, which supports state change notifications, has been implemente
 
 The NLM protocol, which is used to implement file locking, has not been implemented.
 
-## 5. License
+Nefarious, like frpc, uses LOG4CL for debug logging. It also shares the unfortunate property of very poor performance
+when debug logging is turned on. When not doing development, please turn the debug logging off. Going forward, 
+it would probably be a good idea to use low-latency debug logging system (such as what?). 
+
+If running nefarious on systems with a port-mapper program already running (such as all typical Linux systems), you should 
+not run the port-mapper program from Lisp. Set the PORT-MAPPER option to NFS:START as nil. This will register the nefarious 
+RPC programs with the local portmapper instead of the Lisp port mapper. 
+
+## 6. License
 
 Released under the terms of the MIT license.
 
