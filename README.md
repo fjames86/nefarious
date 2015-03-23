@@ -1,5 +1,5 @@
 # nefarious
-An NFS client and server in Common Lisp.
+An NFS client and server in Common Lisp. 
 
 ## 1. Introduction
 
@@ -8,8 +8,11 @@ Nefarious is an NFS implemention in Common Lisp, supporting both client and serv
 The Nefarious client has been used successfully with the [FreeNFS](http://sourceforge.net/projects/freenfs/) on Windows 8.1.
 
 The Nefarious server has been successfully mounted with [nekodrive](https://code.google.com/p/nekodrive/) and 
-the NFS client that comes with Ubuntu Linux.
+the NFS client that comes with Ubuntu Linux. 
 
+The Nefarious server does not implement the "raw" filesystem interaction. Instead, it provides the interaction
+with the RPC layer and defines an API that users should implement. This makes it easy to export arbitrary 
+filesystems over NFS.
 
 ## 2. Client
 
@@ -64,6 +67,11 @@ The default provider, SIMPLE-PROVIDER, can be used to export a directory from th
 ;; registers a simple provider that exports the administrator home directory
 (register-provider (make-simple-provider "C:\\Users\\administrator") "/admin")
 ```
+
+Please note that this provider really is very "simple". It does not try to do anything fancy, it will 
+not scale to large directories of files (because it builds up a list of file handles and makes no attempt to 
+purge them). It's main aim is to provide an example of a working provider. More serious users
+should endeavour to write their own provider.
 
 #### 3.1.2 Registry provider
 

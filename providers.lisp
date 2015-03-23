@@ -48,19 +48,24 @@
       (setf *providers* (remove provider *providers*)))))
 
 ;; for the external handles we prepend the provider ID so we know who to dispatch to
-(defxtype* provider-fh ((:reader read-provider-fh) (:writer write-provider-fh))
-  (:list :uint32 (:varray* :octet)))
+;;(defxtype* provider-fh ((:reader read-provider-fh) (:writer write-provider-fh))
+;;  (:list :uint32 (:varray* :octet)))
 
 (defun fh-provider-handle (fh)
   "Convert an external NFS handle to an internal provider handle."
   (handler-case 
-      (destructuring-bind (id handle) (unpack #'read-provider-fh fh)
-	(list (find-provider id) handle))
+      (let ((id (nibbles:ub32ref/be (coerce (subseq fh 0 4) '(vector (unsigned-byte 8))) 0))
+            (h (subseq fh 4)))
+        (list (find-provider id) h))
     (error () '(nil nil))))
 
 (defun provider-handle-fh (provider handle)
   "Convert an internal provider handle into an external NFS handle."
-  (pack #'write-provider-fh (list (provider-id provider) handle)))
+  (concatenate 'vector 
+               (let ((v (nibbles:make-octet-vector 4)))
+                 (setf (nibbles:ub32ref/be v 0) (provider-id provider))
+                 v)
+               handle))
 
 ;; ----------------------------------------
 
