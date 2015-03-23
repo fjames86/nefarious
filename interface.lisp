@@ -164,9 +164,9 @@
     (otherwise post-op-attr))
   (:arg-transformer (handle access)
     (list handle
-	  (if (integerp access)
-	      access
-	      (pack-nfs-access access))))
+	  (etypecase access
+        (integer access)
+        (list (pack-nfs-access access)))))
   (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(destructuring-bind (attr access) (xunion-val res)
@@ -252,6 +252,7 @@ of NFS-ACCESS flag symbols. Returns (values post-op-attr access"))
     (destructuring-bind (provider handle) (fh-provider-handle fh)
       (cond
 	((and provider (client-mounted-p provider *rpc-remote-host*))
+;;     (log:debug "READ ~A@~A" count offset)
 	 (handler-case 
 	     (multiple-value-bind (bytes eof) (nfs-provider-read provider handle offset count)
 	       (make-xunion :ok
@@ -260,16 +261,18 @@ of NFS-ACCESS flag symbols. Returns (values post-op-attr access"))
 				  eof
 				  bytes)))
 	   (nfs-error (e)
-	     (log:debug "~A" e)
+	     (log:error "~A" e)
 	     (make-xunion (nfs-error-stat e) 
 			  (nfs-provider-attrs provider handle)))
 	   (error (e)
-	     (log:debug "~A" e)
+	     (log:error "~A" e)
 	     (make-xunion :server-fault
 			  (nfs-provider-attrs provider handle)))))
 	(provider 
+     (log:error "access")
 	 (make-xunion :access nil))
 	(t
+     (log:error "bad handle")
 	 (make-xunion :bad-handle nil))))))
 
 ;; ------------------------------------------------------

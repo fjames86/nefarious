@@ -345,15 +345,15 @@ be a string naming the mount-point that is exported by NFS."
 (defmethod nfs-provider-fs-info ((provider simple-provider) handle)
   "Returns dynamic filesystem information, in an FS-INFO structure."
   (make-fs-info :attrs nil ;; attributes of the file 
-		:rtmax #xffffffff ;; maximum read request count
-		:rtpref #xffffffff ;; preferred read count -- should be same as rtmax
-		:rtmult 4 ;; suggested multiple for read requests
-		:wtmax #xffffffff ;; maximum write request count 
-		:wtpref #xffffffff ;; preferred write count
-		:wtmult 4 ;; suggested multiple for writes
-		:dtpref #xffffffff ;; preferred size for read-dir
+		:rtmax 32768 ;; maximum read request count
+		:rtpref 32768 ;; preferred read count -- should be same as rtmax
+		:rtmult 512 ;; suggested multiple for read requests
+		:wtmax 32768 ;; maximum write request count 
+		:wtpref 32786 ;; preferred write count
+		:wtmult 512 ;; suggested multiple for writes
+		:dtpref 32768 ;; preferred size for read-dir
 		:max-fsize #xffffffff ;; maximum file size
-		:time-delta (nefarious::make-nfs-time3 :seconds 1)
+		:time-delta (nefarious:make-nfs-time3 :seconds 1)
 		:properties (frpc:enum 'nefarious::nfs-info :homogenous)))
 
 
