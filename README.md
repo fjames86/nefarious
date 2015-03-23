@@ -1,5 +1,7 @@
 # nefarious
-An NFS client and server in Common Lisp. 
+Nefarious is an NFS client and server in Common Lisp. It is intended to be as portable as possible. 
+It has been primarily developed using SBCL on Windows. Both client and server have been run on Windows 
+and Linux and should perform equally.
 
 ## 1. Introduction
 
