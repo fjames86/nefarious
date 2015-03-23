@@ -1,7 +1,11 @@
 ;;;; Copyright (c) Frank James 2015 <frank.a.james@gmail.com>
 ;;;; This code is licensed under the MIT license.
 
-;; need CFFI and CL-PPCRE for this
+;;; Exports the Windows registry as an NFS filesystem
+;;; Recommended to be administrator to run this
+;;; it does not correctly handle permissions, so things may go wrong 
+;;; if it is unable to open registry key handles
+
 
 (defpackage #:nefarious.registry
   (:use #:cl #:nefarious #:cffi)
@@ -433,24 +437,24 @@
     (push handle (handles provider))
     handle))
 
-(defun parse-keypath (path)
-  "match the path agaisnt the regex <tree>\\<key>[:<value>]"
-  (multiple-value-bind (matched matches) 
-      (cl-ppcre:scan-to-strings "(HKLM|HKCU|HKCR|HKCC|HKUSERS)\\\\((\\w+\\\\?)*):?(\\w+)?" path)
-    (when matched
-      (let ((tree (aref matches 0))
-	    (key (aref matches 1))
-	    (name (aref matches 3)))
-	(make-rhandle :tree (cond
-			      ((string= tree "HKLM") :local-machine)
-			      ((string= tree "HKCU") :current-user)
-			      ((string= tree "HKCR") :classes-root)
-			      ((string= tree "HKCC") :current-config)
-			      ((string= tree "HKUSERS") :users)
-			      (t (error "Invalid registry hive")))
-		      :key (when (and key (not (string= key "")))
-			     key)
-		      :name name)))))
+;;(defun parse-keypath (path)
+;;  "match the path agaisnt the regex <tree>\\<key>[:<value>]"
+;;  (multiple-value-bind (matched matches) 
+;;      (cl-ppcre:scan-to-strings "(HKLM|HKCU|HKCR|HKCC|HKUSERS)\\\\((\\w+\\\\?)*):?(\\w+)?" path)
+;;    (when matched
+;;      (let ((tree (aref matches 0))
+;;	    (key (aref matches 1))
+;;	    (name (aref matches 3)))
+;;	(make-rhandle :tree (cond
+;;			      ((string= tree "HKLM") :local-machine)
+;;			      ((string= tree "HKCU") :current-user)
+;;			      ((string= tree "HKCR") :classes-root)
+;;			      ((string= tree "HKCC") :current-config)
+;;			      ((string= tree "HKUSERS") :users)
+;;			      (t (error "Invalid registry hive")))
+;;		      :key (when (and key (not (string= key "")))
+;;			     key)
+;;		      :name name)))))
 
 (defun rhandle-exists-p (rhandle)
   "Check whether the registry key/value specified by the handle actually exists."
@@ -494,7 +498,9 @@
 				       (rhandle-name rhandle)
 				       (rhandle-key rhandle))))))
 	  (make-fattr3 :type (if name :reg :dir)
-		       :mode #xff ;; FIXME: what to put here?
+		       :mode (pack-mode :owner '(:read :write :execute)
+                                :group '(:read :write)
+                                :others '(:read))
 		       :uid 0
 		       :gid 0
 		       :size (if name size 0)
@@ -508,6 +514,9 @@
 ;; don't support this
 ;;(defmethod (setf nfs-provider-attrs) (value (provider simple-provider) handle)
 ;;  nil)
+
+(defmethod nfs-provider-access ((provider registry-provider) handle access)
+  '(:read :lookup :modify :extend :delete :execute))
 
 (defmethod nfs-provider-lookup ((provider registry-provider) dh name)
   (let ((dhandle (find-rhandle provider :fh dh)))

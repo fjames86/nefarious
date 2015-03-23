@@ -40,7 +40,12 @@
   (destructuring-bind (provider handle) (fh-provider-handle fh)
     (cond
       ((and provider (client-mounted-p provider *rpc-remote-host*))
-       (make-xunion :ok (nfs-provider-attrs provider handle)))
+       (handler-case (make-xunion :ok (nfs-provider-attrs provider handle))
+         (nfs-error (e)
+           (make-xunion (nfs-error-stat e) nil))
+         (error (e)
+           (log:config "~A" e)
+           (make-xunion :server-fault nil))))
       (provider 
        ;; client not mounted
        (make-xunion :access nil))
@@ -180,10 +185,17 @@ of NFS-ACCESS flag symbols. Returns (values post-op-attr access"))
     (destructuring-bind (provider handle) (fh-provider-handle fh)
       (cond
 	((and provider (client-mounted-p provider *rpc-remote-host*))
-	 (make-xunion :ok
-		      (list (nfs-provider-attrs provider handle)
-			    (pack-nfs-access (nfs-provider-access provider handle access)))))
-	(provider 
+     (handler-case 
+         (make-xunion :ok
+                      (list (maybe-provider-attrs provider handle)
+                            (pack-nfs-access (nfs-provider-access provider handle access))))
+       (nfs-error (e)
+         (make-xunion (nfs-error-stat e)
+                      (maybe-provider-attrs provider handle)))
+       (error (e)
+         (log:debug "~A" e)
+         (make-xunion :server-fault nil))))
+    (provider 
 	 (make-xunion :access nil))
 	(t
 	 (make-xunion :bad-handle nil))))))
