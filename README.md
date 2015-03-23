@@ -42,16 +42,8 @@ A stream type which reads/writes to remote files, NFS-FILE-STREAM.
 
 ## 3. Server 
 
-The server component is an RPC server which implements the port-mapper, mount and NFS programs. 
-It listens on ports 111, 635 and 2049 (TCP and UDP).
-
-Run the server using:
-
-```
-(nfs:start)
-
-(nfs:stop)
-```
+In order for the server to actually export any filesystems over NFS, users should first register
+a provider. They should then simply start an RPC server.
 
 ### 3.1 Providers
 
@@ -85,6 +77,25 @@ Windows only. Exports the windows registry as an NFS filesystem.
 (register-provider (nfs.registry:make-registry-provider :local-machine "SOFTWARE") "/hklm/software")
 ```
 
+### 3.2 Example
+The server component is an RPC server which implements the port-mapper, mount and NFS programs. 
+It listens on ports 111, 635 and 2049 (TCP and UDP).
+
+Run the server using:
+
+```
+(nfs:start)
+
+(nfs:stop)
+```
+
+Mount from Linux using the typical command,
+```
+$ mount -t nfs -o udp,nolock,nfsvers=3 192.168.0.1:/ /media/nfs
+$ ls -l /media/nfs
+$ umount /media/nfs 
+```
+
 ## 4. Notes
 
 Nefarious is based on [frpc](https://github.com/fjames86/frpc), the underlying ONC-RPC implementation.
@@ -93,7 +104,9 @@ The primary purpose of both projects is to get something simple which works, rat
 product. At best, it should be considered an educational project which could be used to form the basis of something better.
 Please do not expect high performance or a bug-free experience, although it would be nice to have both eventually.
 
-The NLM/NSM protocols (for file locking) needs to be implemented.
+The NSM protocol, which supports state change notifications, has been implemented. 
+
+The NLM protocol, which is used to implement file locking, has not been implemented.
 
 ## 5. License
 
