@@ -151,12 +151,12 @@
 (defxtype* set-size3 () (:optional size3))
 
 (defxunion set-atime (time-how)
-  ((:set-to-client-time nfs-time3) 
-   (otherwise :void)))
+  (:set-to-client-time nfs-time3) 
+  (otherwise :void))
 
 (defxunion set-mtime (time-how)
-  ((:set-to-client-time nfs-time3)
-   (otherwise :void)))
+  (:set-to-client-time nfs-time3)
+  (otherwise :void))
 
 (defxstruct sattr3 ()
   (mode set-mode3)
