@@ -77,13 +77,17 @@
   (let ((provider (nefarious:find-provider dpath)))
     (cond 
       (provider
-       ;; push the client onto the provider's client list 
-       (pushnew *rpc-remote-host* (nefarious:provider-clients provider) :test #'equalp)
        ;; get the mount handle 
-       (let ((dhandle (nefarious:nfs-provider-mount provider *rpc-remote-host*)))
-	 (make-xunion :ok
-		      (list (nefarious:provider-handle-fh provider dhandle)
-			    '(:auth-null)))))
+       (handler-case 
+           (let ((dhandle (nefarious:nfs-provider-mount provider *rpc-remote-host*)))
+             ;; push the client onto the provider's client list 
+             (pushnew *rpc-remote-host* (nefarious:provider-clients provider) :test #'equalp)         
+             (make-xunion :ok
+                          (list (nefarious:provider-handle-fh provider dhandle)
+                                '(:auth-null))))
+         (error (e)
+           (log:debug "error ~A" e)
+           (make-xunion :access nil))))
       (t 
        ;; no provider registered on that path
        (make-xunion :inval nil)))))
@@ -128,18 +132,20 @@
 (defrpc call-unmount 3 dir-path :void
   (:arg-transformer (dpath) dpath))
 
-;; FIXME: when we support keeping a list of mounted clients we should 
-;; remove the client from this list 
 (defhandler %handle-unmount (dpath 3)
   (let ((provider (nefarious:find-provider dpath)))
     (cond
       (provider
-       ;; remove the client from the provider's client list 
-       (setf (nefarious:provider-clients provider)
-	     (remove *rpc-remote-host* (nefarious:provider-clients provider) 
-		     :test #'equalp))
-       ;; tell the provider about it 
-       (nefarious:nfs-provider-unmount provider *rpc-remote-host*)
+       (handler-case 
+           (progn 
+             ;; tell the provider the client would  like to unmount        
+             (nefarious:nfs-provider-unmount provider *rpc-remote-host*)
+             ;; remove the client from the provider's client list 
+             (setf (nefarious:provider-clients provider)
+                   (remove *rpc-remote-host* (nefarious:provider-clients provider) 
+                           :test #'equalp)))
+         (error (e)
+           nil))
        nil)
       (t 
        nil))))
@@ -156,9 +162,8 @@
 ;; export -- return export list 
 (defxtype* groups () (:optional group-node))
 
-(defxstruct group-node ()
-  (name name)
-  (next groups))
+(defxtype* group-node () 
+  (:plist :name name :next groups))
 
 (defxtype* exports () (:optional export-node))
 
@@ -174,11 +179,12 @@
 	((null enodes) elist)
       (push (list :dir (export-node-dir enodes)
                   :groups 
-                  (do ((groups (export-node-groups enodes) (group-node-next groups))
+                  (do ((groups (export-node-groups enodes) (getf groups :next))
                        (glist nil))
                       ((null groups) glist)
-                    (push (group-node-name groups) glist)))
-	    elist))))
+                    (push (getf groups :name) glist)))
+	    elist)))
+  (:documentation "Returns a list of the exported filesystems from the NFS server."))
 
 (defhandler %handle-export (void 5)
   (declare (ignore void))
