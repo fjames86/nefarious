@@ -8,7 +8,7 @@
 ;; the rpc server 
 (defvar *server* nil)
 
-(defun start (&key port-mapper (nsm t) ports)
+(defun start (&key (port-mapper #+(or windows win32)t #-(or windows win32)nil) (nsm t) ports)
   "Start the NFS server. If PORT-MAPPER is nil, then it is assumed the port-mapper program is running externally to Lisp and all port mappings are added using RPC calls to it. Otherwise the server will run its own port mapper by listening on port 111.
 
 When NSM is non-nil, the NSM program, which facilitates server state change notifications, will be supported.
@@ -40,8 +40,8 @@ If PORTS is supplied, it shouild be a list of integers specifying the port numbe
 		    :tcp-ports ports
 		    :udp-ports ports))
 
-(defun stop (&key port-mapper)
-  "Stop the NFS server."
+(defun stop (&key (port-mapper #+(or windows win32)t #-(or windows win32)nil))
+  "Stop the NFS server. If PORT-MAPPER is nil, it is assumed Lisp is not running the port mapper program and instead the local port-mapper is communicated with using RPC."
   (stop-rpc-server *server*)
   (port-mapper:remove-all-mappings :rpc (not port-mapper))
   nil)
