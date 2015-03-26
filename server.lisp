@@ -30,7 +30,7 @@ If PORTS is supplied, it shouild be a list of integers specifying the port numbe
 
   ;; setup the port mappings
   (port-mapper:add-all-mappings ports ports 
-				:rpc (not port-mapper))
+                                :rpc (not port-mapper))
   
   ;; when using locking NLM/NSM protocols we need to initialize the state variable 
   (when nsm (nsm:init-nsm))
@@ -40,7 +40,11 @@ If PORTS is supplied, it shouild be a list of integers specifying the port numbe
 		    :tcp-ports ports
 		    :udp-ports ports))
 
-(defun stop ()
+(defun stop (&key port-mapper)
   "Stop the NFS server."
-  (stop-rpc-server *server*))
+  (stop-rpc-server *server*)
+  (port-mapper:remove-all-mappings :rpc (not port-mapper))
+  nil)
+
+
 

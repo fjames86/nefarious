@@ -172,12 +172,12 @@
     (do ((enodes res (export-node-next enodes))
 	 (elist nil))
 	((null enodes) elist)
-      (push (list (cons :dir (export-node-dir enodes))
-		  (cons :groups 
-			(do ((groups (export-node-groups enodes) (group-node-next groups))
-			     (glist nil))
-			    ((null groups) glist)
-			  (push (group-node-name groups) glist))))
+      (push (list :dir (export-node-dir enodes)
+                  :groups 
+                  (do ((groups (export-node-groups enodes) (group-node-next groups))
+                       (glist nil))
+                      ((null groups) glist)
+                    (push (group-node-name groups) glist)))
 	    elist))))
 
 (defhandler %handle-export (void 5)

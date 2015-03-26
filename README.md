@@ -100,10 +100,12 @@ Run the server using:
 ;; if running on systems without a port mapper (such as Windows)
 (nfs:start :port-mapper t)
 
-(nfs:stop)
+(nfs:stop :port-mapper t)
 
 ;; if running on systems with a port mapper program (such as Linux)
 (nfs:start :port-mapper nil)
+
+(nfs:stop :port-mapper nil)
 ```
 
 Mount from Linux using the typical command,
