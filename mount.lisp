@@ -145,6 +145,7 @@
                    (remove *rpc-remote-host* (nefarious:provider-clients provider) 
                            :test #'equalp)))
          (error (e)
+           (log:debug "error ~A" e)
            nil))
        nil)
       (t 
