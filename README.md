@@ -91,13 +91,14 @@ Windows only. Exports the windows registry as an NFS filesystem.
 
 ### 3.2 Example
 The server component is an RPC server which implements the port-mapper, mount and NFS programs. 
-It listens on ports 111, 635 and 2049 (TCP and UDP).
+By default it listens on port 2049 (TCP and UDP). It will also listen on port 111 if a port mapper program
+is requred.
 
 Run the server using:
 
 ```
 ;; if running on systems without a port mapper (such as Windows)
-(nfs:start)
+(nfs:start :port-mapper t)
 
 (nfs:stop)
 
@@ -113,7 +114,6 @@ $ umount /media/nfs
 ```
 
 If you have the NFS client for Windows Server installed, you can simply map the network drive from explorer.
-I have done it, it works.
 
 ## 4. Network status Monitor
 
