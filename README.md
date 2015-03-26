@@ -9,12 +9,14 @@ Nefarious is an NFS implemention in Common Lisp, supporting both client and serv
 
 The Nefarious client has been used successfully with the [FreeNFS](http://sourceforge.net/projects/freenfs/) on Windows 8.1.
 
-The Nefarious server has been successfully mounted with [nekodrive](https://code.google.com/p/nekodrive/) and 
-the NFS client that comes with Ubuntu Linux. 
+The Nefarious server has been successfully mounted with [nekodrive](https://code.google.com/p/nekodrive/),
+the Linux NFS client, and the NFS client for Windows Server. 
 
 The Nefarious server does not implement the "raw" filesystem interaction. Instead, it provides the interaction
-with the RPC layer and defines an API that users should implement. This makes it easy to export arbitrary 
-filesystems over NFS.
+with the RPC layer and defines an API that users should implement to provide the underlying functionality. 
+This makes it easy to export arbitrary filesystems over NFS.
+
+Nefarious comes with a built-in provider which exports the host filesystem using the standard Common Lisp functions. 
 
 ## 2. Client
 
@@ -33,7 +35,7 @@ in NEFARIOUS.MOUNT package and the NFS messages in NEFARIOUS package. For exampl
 (nfs.mount:call-unmount "/" :host "myhost" :protocol :udp)
 ```
 
-## 2.1 NFS file streams
+### 2.1 NFS file streams
 
 A stream type which reads/writes to remote files, NFS-FILE-STREAM.
 
@@ -53,8 +55,8 @@ a provider. They should then simply start an RPC server.
 ### 3.1 Providers
 
 Users should register providers to implement the NFS functionality. Providers are instances 
-of classes which inherit from NFS-PROVIDER. Users should specialize the generic functions 
-defined in providers.lisp to implement the functionality of each NFS method. 
+of subclasses of NFS-PROVIDER. Users should specialize the generic functions 
+defined in providers.lisp to implement the functionality of each NFS method they wish to support.
 See the  simple provider or the examples. It is possible to define providers which export
 a virtual filesystem, the Windows registry etc.
 
@@ -109,6 +111,9 @@ $ mount -t nfs -o udp,nolock,nfsvers=3 192.168.0.1:/ /media/nfs
 $ ls -l /media/nfs
 $ umount /media/nfs 
 ```
+
+If you have the NFS client for Windows Server installed, you can simply map the network drive from explorer.
+I have done it, it works.
 
 ## 4. Network status Monitor
 

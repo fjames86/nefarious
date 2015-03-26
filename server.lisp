@@ -8,21 +8,20 @@
 ;; the rpc server 
 (defvar *server* nil)
 
-(defun start (&key (port-mapper t) (nsm t) ports)
+(defun start (&key port-mapper (nsm t) ports)
   "Start the NFS server. If PORT-MAPPER is nil, then it is assumed the port-mapper program is running externally to Lisp and all port mappings are added using RPC calls to it. Otherwise the server will run its own port mapper by listening on port 111.
 
 When NSM is non-nil, the NSM program, which facilitates server state change notifications, will be supported.
 
-If PORTS is supplied, it shouild be a list of integers specifying the port numbers to listen on (TCP and UDP will be used). Otherwise 
-the default port numbers 2049 and 635 will be used.
+If PORTS is supplied, it shouild be a list of integers specifying the port numbers to listen on (TCP and UDP will be used). Otherwise port *RPC-PORT* is used, which defaults to 2049.
 
 "
   ;; make a new server instance
   (setf *server* (make-rpc-server))
   
-  ;; if no ports specified, use the default ports
+  ;; if no ports specified, use the default port
   (unless ports 
-    (setf ports (list *nfs-port* nefarious.mount:*mount-port*)))
+    (setf ports (list *nfs-port*)))
 
   ;; when running port mapper program, ensure the port mapper ports are used.
   ;; this is vital for any external systems to find our programs 
