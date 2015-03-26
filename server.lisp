@@ -3,10 +3,12 @@
 
 (in-package #:nefarious)
 
-
-;; -------------------
 ;; the rpc server 
 (defvar *server* nil)
+
+;; FIXME: if the user provides wildcard port numbers, i.e. 0, then we won't know the port 
+;; that got assigned to us until the rpc server has started
+;; It might be better to hold off adding the port mappings until after the server has started
 
 (defun start (&key (port-mapper #+(or windows win32)t #-(or windows win32)nil) (nsm t) ports)
   "Start the NFS server. If PORT-MAPPER is nil, then it is assumed the port-mapper program is running externally to Lisp and all port mappings are added using RPC calls to it. Otherwise the server will run its own port mapper by listening on port 111.
