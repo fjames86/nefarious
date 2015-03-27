@@ -130,20 +130,22 @@ The local server must also persist a state sequence number. By default nefarious
 
 Nefarious is based on [frpc](https://github.com/fjames86/frpc), the underlying ONC-RPC implementation.
 
-The primary purpose of both projects is to get something simple which works, rather than a high-performance, professional
-product. At best, it should be considered an educational project which could be used to form the basis of something better.
+The primary purpose of both projects is to get something simple which works, rather than a high-performance, 
+professional
+product. At best, it should be considered an educational project which could be used to form the basis of 
+something better.
 Please do not expect high performance or a bug-free experience, although it would be nice to have both eventually.
 
 The NSM protocol, which supports state change notifications, has been implemented. 
 
 The NLM protocol, which is used to implement file locking, has not been implemented.
 
-Nefarious, like frpc, uses LOG4CL for debug logging. It also shares the unfortunate property of very poor performance
-when debug logging is turned on. When not doing development, please turn the debug logging off. Going forward, 
-it would probably be a good idea to use low-latency debug logging system (such as what?). 
+Nefarious, like frpc, uses [pounds](https://github.com/fjames86/pounds) for debug logging. 
 
-If running nefarious on systems with a port-mapper program already running (such as all typical Linux systems), you should 
-not run the port-mapper program from Lisp. Set the PORT-MAPPER option to NFS:START as nil. This will register the nefarious 
+If running nefarious on systems with a port-mapper program already running 
+(such as all typical Linux systems), you should 
+not run the port-mapper program from Lisp. Set the PORT-MAPPER option to NFS:START as nil. 
+This will register the nefarious 
 RPC programs with the local portmapper instead of the Lisp port mapper. 
 
 ## 6. License
