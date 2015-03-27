@@ -22,7 +22,7 @@
 (defparameter *mount-port* 635)
 
 (use-rpc-program +mount-program+ +mount-version+)
-(use-rpc-host '*rpc-host* 635)
+(use-rpc-host '*rpc-host* 2049)
 
 (defconstant +mount-path-len+ 1024)
 (defconstant +mount-name-len+ 255)
@@ -78,6 +78,7 @@
     (cond 
       (provider
        ;; get the mount handle 
+       (nefarious:nfs-log :info "Request for mount")
        (handler-case 
            (let ((dhandle (nefarious:nfs-provider-mount provider *rpc-remote-host*)))
              ;; push the client onto the provider's client list 
@@ -86,10 +87,11 @@
                           (list (nefarious:provider-handle-fh provider dhandle)
                                 '(:auth-null))))
          (error (e)
-           (log:debug "error ~A" e)
+           (nefarious:nfs-log :error "error ~A" e)
            (make-xunion :access nil))))
       (t 
        ;; no provider registered on that path
+       (nefarious:nfs-log :error "No provider registered on path ~S" dpath)
        (make-xunion :inval nil)))))
 
 ;; -----------------------------------------------------
@@ -145,7 +147,7 @@
                    (remove *rpc-remote-host* (nefarious:provider-clients provider) 
                            :test #'equalp)))
          (error (e)
-           (log:debug "error ~A" e)
+           (nefarious:nfs-log :error "error ~A" e)
            nil))
        nil)
       (t 

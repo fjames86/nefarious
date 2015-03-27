@@ -9,8 +9,9 @@
   :license "MIT"
   :components
   ((:file "package")
-   (:file "providers" :depends-on ("package"))
-   (:file "nfs" :depends-on ("package"))
+   (:file "log" :depends-on ("package"))
+   (:file "providers" :depends-on ("log"))
+   (:file "nfs" :depends-on ("log"))
    (:file "errors" :depends-on ("nfs"))
    (:file "mount" :depends-on ("providers"))
    (:file "interface" :depends-on ("errors"))

@@ -30,6 +30,8 @@ If PORTS is supplied, it shouild be a list of integers specifying the port numbe
   (when port-mapper 
     (pushnew 111 ports :test #'=))
 
+  (nfs-log :info "Starting server on ports ~A" ports)
+
   ;; setup the port mappings
   (port-mapper:add-all-mappings ports ports 
                                 :rpc (not port-mapper))

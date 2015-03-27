@@ -124,7 +124,7 @@
 (defun get-file-information (pathspec)
   (let ((path (substitute #\\ #\/ (format nil "~A" (truename pathspec))))
         (info (make-file-information)))
-    (log:debug "fileinfo: ~A" path)
+    (nefarious:nfs-log :info "fileinfo: ~A" path)
     (flet ((getinfo ()
 	     (let ((handle (with-foreign-string (p path)
 			     (%create-file path 
@@ -159,7 +159,7 @@
 		 (%close-handle handle)))))
       (handler-case (getinfo)
 	(error (e) 
-	  (log:debug "~A" e)))
+	  (nefarious:nfs-log :info "~A" e)))
       info)))
 
 
@@ -187,7 +187,7 @@
                      time))))
       (handler-case (getinfo)
         (error (e)
-          (log:debug "~A" e)))
+          (nefarious:nfs-log :info "~A" e)))
       info)))
 
 ;;(defctype time-t
@@ -232,7 +232,7 @@
 ;;           (t nil)))))))
 ;;      (handler-case (getinfo)
 ;;  (error (e)
-;;    (log:debug "~A" e)))
+;;    (nefarious:nfs-log :info "~A" e)))
 ;;      info)))
 
 )

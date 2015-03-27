@@ -38,7 +38,7 @@
 					 (string= name ".")
 					 (string= name "..")))))
     (when (handle-directory-p handle)
-      (log:debug "Attempt to make a file handle from a directory")
+      (nfs-log :info "Attempt to make a file handle from a directory")
       (return-from make-handle nil))
 
     handle))
@@ -109,7 +109,7 @@ the handles list. Returns the newly allocated handle."
   (let ((handle (make-handle dhandle name (next-provider-id provider))))
     ;; if the file does not exist then error
     (unless (cl-fad:file-exists-p (handle-pathname handle))
-      (log:debug "file doesn't exist ~S" (handle-pathname handle))
+      (nfs-log :info "file doesn't exist ~S" (handle-pathname handle))
       (return-from allocate-handle nil))
 
     (push handle (simple-provider-handles provider))
@@ -232,7 +232,7 @@ be a string naming the mount-point that is exported by NFS."
 ;;  nil)
 
 (defmethod nfs-provider-lookup ((provider simple-provider) dh name)
-  (log:debug "dh: ~S name: ~S" dh name)
+  (nfs-log :info "dh: ~S name: ~S" dh name)
   (when (string= name ".") (return-from nfs-provider-lookup dh))
 
   (let ((dhandle (find-handle provider dh)))
@@ -244,7 +244,7 @@ be a string naming the mount-point that is exported by NFS."
 		 ph
 		 (error 'nfs-error :stat :noent))))
 	  (t 	   
-	   (log:debug "Searching for ~S ~S" 
+	   (nfs-log :info "Searching for ~S ~S" 
 		      (handle-pathname dhandle) name)
 	   (let ((handle (allocate-dhandle provider dhandle name)))
 	     (if handle
@@ -260,7 +260,7 @@ be a string naming the mount-point that is exported by NFS."
 
 (defmethod nfs-provider-read ((provider simple-provider) fh offset count)
   "Read count bytes from offset from the object."
-  (log:debug "Read ~A:~A" offset count)
+  (nfs-log :info "Read ~A:~A" offset count)
   (let ((handle (find-handle provider fh)))
     (if handle
 	(read-file handle offset count)
