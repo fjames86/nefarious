@@ -8,8 +8,11 @@
 (defun nfs-log (lvl format-control &rest args)
   (unless *nfs-log*
     (frpc-log :info "Initializing NFS log")
-    (setf *nfs-log* (pounds.log:copy-log frpc:*frpc-log* :tag "NFS ")))
-  (apply #'pounds.log:write-message *nfs-log* lvl format-control args))
+    (setf *nfs-log* (pounds.log:copy-log frpc:*frpc-log* 
+					 :tag "NFS "
+					 :copy-stream t)))
+  (pounds.log:write-message *nfs-log* lvl 
+			    (apply #'format nil format-control args)))
 
 
     
