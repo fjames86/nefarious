@@ -104,6 +104,7 @@
 	  #:make-simple-provider
 	  #:simple-provider
 
+	  ;; logging
 	  #:nfs-log
 	  ))
 

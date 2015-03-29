@@ -3,16 +3,12 @@
 
 (in-package #:nefarious)
 
-(defvar *nfs-log* nil)
-
-(defun nfs-log (lvl format-control &rest args)
-  (unless *nfs-log*
-    (frpc-log :info "Initializing NFS log")
-    (setf *nfs-log* (pounds.log:copy-log frpc:*frpc-log* 
-					 :tag "NFS "
-					 :copy-stream t)))
-  (pounds.log:write-message *nfs-log* lvl 
-			    (apply #'format nil format-control args)))
-
-
+(let ((tag (babel:string-to-octets "NFS ")))
+  (defun nfs-log (lvl format-control &rest args)
+    (unless frpc:*frpc-log*
+      (frpc-log :info "initialzing NFS log"))
+    (pounds.log:write-message frpc:*frpc-log*
+			      lvl
+			      (apply #'format nil format-control args)
+			      :tag tag)))
     
