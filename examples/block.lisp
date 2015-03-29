@@ -8,6 +8,8 @@
 
 (in-package #:nefarious.block)
 
+;;; I didn't finish typing this in, it's not complete and doesn't work.
+;;; Please don't try to use it.
 
 (defun get-last-error ()
   (nefarious.finfo::get-last-error))
