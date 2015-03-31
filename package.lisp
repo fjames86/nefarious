@@ -30,19 +30,19 @@
 
 	  ;; some of the essential NFS structures
 	  #:make-fattr3
-      #:fattr3-type
-      #:fattr3-mode
-      #:fattr3-nlink
-      #:fattr3-uid
-      #:fattr3-gid
-      #:fattr3-size
-      #:fattr3-used
-      #:fattr3-rdev
-      #:fattr3-fsid
-      #:fattr3-fileid
-      #:fattr3-atime 
-      #:fattr3-mtime 
-      #:fattr3-ctime 
+	  #:fattr3-type
+	  #:fattr3-mode
+	  #:fattr3-nlink
+	  #:fattr3-uid
+	  #:fattr3-gid
+	  #:fattr3-size
+	  #:fattr3-used
+	  #:fattr3-rdev
+	  #:fattr3-fsid
+	  #:fattr3-fileid
+	  #:fattr3-atime 
+	  #:fattr3-mtime 
+	  #:fattr3-ctime 
 
 	  #:make-nfs-time3
 	  #:make-fs-info
@@ -65,6 +65,8 @@
 	  ;; client streams
 	  #:nfs-file-stream
 	  #:make-nfs-file-stream
+	  #:copy-remote-file 
+	  #:copy-remote-directory 
 
 	  ;; providers
 	  #:nfs-provider

@@ -15,7 +15,8 @@
 
 ;; ------------------------------------------------------
 ;; void NFSPROC3_NULL(void)                    = 0;
-(defrpc call-null 0 :void :void)
+(defrpc call-null 0 :void :void
+  (:documentation "Test connectivity to the server."))
 
 (defhandler %handle-null (void 0)
   (declare (ignore void))
@@ -34,7 +35,7 @@
     (if (eq (xunion-tag res) :ok)
 	(xunion-val res)
 	(error 'nfs-error :stat (xunion-tag res))))
-  (:documentation "Get file attributes"))
+  (:documentation "Get file attributes."))
  
 (defhandler %handle-get-attrs (fh 1)
   (destructuring-bind (provider handle) (fh-provider-handle fh)
@@ -65,7 +66,7 @@
     (if (eq (xunion-tag res) :ok)
 	(xunion-val res)
 	(error 'nfs-error :stat (xunion-tag res))))
-  (:documentation "Set attributes"))
+  (:documentation "Set attributes."))
 
 (defhandler %handle-set-attrs (args 2)
   (destructuring-bind (fh new-attrs guard) args
@@ -214,7 +215,8 @@ of NFS-ACCESS flag symbols. Returns (values post-op-attr access"))
     (if (eq (xunion-tag res) :ok)
 	(destructuring-bind (attr path) (xunion-val res)
 	  (values attr path))
-	(error 'nfs-error :stat (xunion-tag res)))))
+	(error 'nfs-error :stat (xunion-tag res))))
+  (:documentation "Read the contents of a symbolic link. Returns (values attrs path)."))
 
 (defhandler %handle-readlink (fh 5)
   (destructuring-bind (provider handle) (fh-provider-handle fh)
@@ -257,7 +259,9 @@ of NFS-ACCESS flag symbols. Returns (values post-op-attr access"))
 	    (error "Bytes returned ~A does not equal claimed count ~A" 
 		   (length data) count))
 	  (values data eof attr))
-	(error 'nfs-error :stat (xunion-tag res)))))
+	(error 'nfs-error :stat (xunion-tag res))))
+  (:documentation "Read COUNT bytes from OFFSET of file. Returns (values bytes eof-p attrs). EOF-P will be T if 
+the end of the file was reached."))
 
 (defhandler %handle-read (args 6)
   (destructuring-bind (fh offset count) args
@@ -307,7 +311,8 @@ of NFS-ACCESS flag symbols. Returns (values post-op-attr access"))
     (if (eq (xunion-tag res) :ok)
 	(destructuring-bind (wcc count stable wverf) (xunion-val res)
 	  (values count wverf wcc stable))
-	(error 'nfs-error :stat (xunion-tag res)))))
+	(error 'nfs-error :stat (xunion-tag res))))
+  (:documentation "Write bytes at offset of file. Returns (values count write-verf wcc stable)."))
 
 ;; FIXME: we should do something with the STABLE parameter. 
 (defhandler %handle-write (args 7)
@@ -864,7 +869,9 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
 		  (dir-list3-plus-eof dlist)
 		  attr
 		  cverf))
-	(error 'nfs-error :stat (xunion-tag res)))))
+	(error 'nfs-error :stat (xunion-tag res))))
+  (:documentation "Extended directory read. Same as READ-DIR but also collects file attributes and handles. 
+Returns (values (name handle attrs)* eof-p attrs cverf)."))
 
 (defhandler %handle-read-dir-plus (args 17)
   (destructuring-bind (dh cookie verf count max) args

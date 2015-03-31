@@ -11,7 +11,7 @@
 	   #:call-dump
 	   #:call-unmount
 	   #:call-unmount-all
-	   #:call-export
+	   #:call-exports
 	   #:*mount-port*))
 
 (in-package #:nefarious.mount)
@@ -70,7 +70,8 @@
     (case (xunion-tag res)
       (:ok (destructuring-bind (dhandle auth-flavours) (xunion-val res)
 	     (values dhandle auth-flavours)))
-      (otherwise (error 'mount-error :stat (xunion-tag res))))))
+      (otherwise (error 'mount-error :stat (xunion-tag res)))))
+  (:documentation "Mount the share named by DPATH. Returns (values dhandle auth-flavours)."))
 
 (defhandler %handle-mount (dpath 1)
   "Find the exported directory with the export name DPATH and return its handle and authentication flavours."
@@ -112,7 +113,8 @@
     (do ((mount-list res (mount-body-next mount-list))
 	 (mlist nil))
 	((null mount-list) mlist)
-      (push (mount-body-mount mount-list) mlist))))
+      (push (mount-body-mount mount-list) mlist)))
+  (:documentation "List all the currently mounted shares."))
 
 ;; return a list of all the mounts of all the clients 
 (defhandler %handle-dump (void 2)
@@ -132,7 +134,8 @@
 ;; -----------------------------------------------------
 ;; unmount -- remove mount entry 
 (defrpc call-unmount 3 dir-path :void
-  (:arg-transformer (dpath) dpath))
+  (:arg-transformer (dpath) dpath)
+  (:documentation "Unmount the share named by DPATH."))
 
 (defhandler %handle-unmount (dpath 3)
   (let ((provider (nefarious:find-provider dpath)))
@@ -154,12 +157,26 @@
        nil))))
 
 ;; -----------------------------------------------------
-;; unmount all -- remove all mount entries
-(defrpc call-unmount-all 4 :void :void)
+;; unmount all -- remove all mount entries for the calling client 
+(defrpc call-unmount-all 4 :void :void
+  (:documentation "Unmount all shares currently mounted on the NFS server."))
 
-;;(defhandler %handle-unmount-all (void 4)
-;;  (declare (ignore void))
-;;  nil)
+(defhandler %handle-unmount-all (void 4)
+  (declare (ignore void))
+  ;; interate over all providers, those which have client in their clients
+  ;; list should be unmounted
+  (let ((client *rpc-remote-host*))
+    (dolist (provider nefarious::*providers*)
+      (when (nfs::client-mounted-p provider client)
+	(handler-case 
+	    (progn 
+	      (nefarious:nfs-provider-unmount provider client)
+	      (setf (nefarious:provider-clients provider)
+		    (remove client (nefarious:provider-clients provider)
+			    :test #'equalp)))
+	  (error (e)
+	    (nefarious:nfs-log :error "Failed to unmount: ~A" e))))))
+  nil)
 
 ;; -----------------------------------------------------
 ;; export -- return export list 
@@ -175,7 +192,7 @@
   (groups groups)
   (next exports))
 
-(defrpc call-export 5 :void exports
+(defrpc call-exports 5 :void exports
   (:transformer (res)
     (do ((enodes res (export-node-next enodes))
 	 (elist nil))
@@ -187,7 +204,7 @@
                       ((null groups) glist)
                     (push (getf groups :name) glist)))
 	    elist)))
-  (:documentation "Returns a list of the exported filesystems from the NFS server."))
+  (:documentation "Returns a list of the exported filesystems from the NFS server. Each entry in the list is a plist with properties :DIR and :GROUPS."))
 
 (defhandler %handle-export (void 5)
   (declare (ignore void))
