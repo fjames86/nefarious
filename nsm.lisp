@@ -183,21 +183,36 @@ The FUNCTION will be executed with arguments (hostname state private)."
 
 ;; -----------------------------------------
 
-(defrpc call-null 0 :void :void
-  (:documentation "Test connectivity to the NSM service."))
-(defhandler %handle-null (void 0)
+(defun %handle-null (void)
   (declare (ignore void))
   nil)
+
+(defrpc call-null 0 :void :void
+  (:documentation "Test connectivity to the NSM service.")
+  (:handler #'%handle-null))
+
+;; ------------------------------------------
+
+(defun %handle-stat (name)
+  (declare (ignore name))
+  (list :fail 0))
 
 (defrpc call-stat 1 :string stat-res
   (:arg-transformer (hostname) hostname)
   (:transformer (res)
     (destructuring-bind (stat seqno) res
       (values seqno (eq stat :success))))
-  (:documentation "Test whether the NSM service will monitor a given host. In many current implementations this procedure is not operative and always returns a :FAIL status. Returns (values state-seqno success-p)"))
-(defhandler %handle-stat (name 1)
-  (declare (ignore name))
-  (list :fail 0))
+  (:documentation "Test whether the NSM service will monitor a given host. In many current implementations this procedure is not operative and always returns a :FAIL status. Returns (values state-seqno success-p)")
+  (:handler #'%handle-stat))
+
+
+;; -------------------------------------
+
+(defun %handle-monitor (arg)
+  (destructuring-bind (hostname id private) arg
+    (register-server hostname)
+    (register-client hostname :id id :private private))
+  (list :success *state*))
 
 (defrpc call-monitor 2 
   (:list :string my-id (:varray* :octet 16))
@@ -212,12 +227,16 @@ The FUNCTION will be executed with arguments (hostname state private)."
   (:transformer (res)
     (destructuring-bind (stat seqno) res
       (values seqno (eq stat :success))))
-  (:documentation "Initiates monitoring of the specified host. When the notifications of state changes are received from the host, the new state is stored and all registered clients are notified."))
-(defhandler %handle-monitor (arg 2)
-  (destructuring-bind (hostname id private) arg
-    (register-server hostname)
-    (register-client hostname :id id :private private))
-  (list :success *state*))
+  (:documentation "Initiates monitoring of the specified host. When the notifications of state changes are received from the host, the new state is stored and all registered clients are notified.")
+  (:handler #'%handle-monitor))
+
+;; -------------------------------------
+
+
+(defun %handle-unmonitor (arg)
+  (destructuring-bind (hostname id) arg
+    (unregister-client hostname :id id))
+  *state*)
 
 (defrpc call-unmonitor 3 
   (:list :string my-id)
@@ -227,10 +246,15 @@ The FUNCTION will be executed with arguments (hostname state private)."
                                :program program
                                :version version
                                :proc proc)))
-  (:documentation "No longer monitor the specified host. Notifications to the specified callback will no longer be sent. Returns the state of the local NSM."))
-(defhandler %handle-unmonitor (arg 3)
-  (destructuring-bind (hostname id) arg
-    (unregister-client hostname :id id))
+  (:documentation "No longer monitor the specified host. Notifications to the specified callback will no longer be sent. Returns the state of the local NSM.")
+  (:handler #'%handle-unmonitor))
+
+;; ----------------------------------------
+
+
+(defun %handle-unmonitor-all (id)
+  (declare (ignore id))
+  (setf *clients* nil)
   *state*)
 
 (defrpc call-unmonitor-all 4 my-id :int32
@@ -239,26 +263,30 @@ The FUNCTION will be executed with arguments (hostname state private)."
                 :program program
                 :version version
                 :proc proc))
-  (:documentation "Stops monitoring all hosts for which monitoring was requested."))
-(defhandler %handle-unmonitor-all (id 4)
-  (declare (ignore id))
-  (setf *clients* nil)
-  *state*)
+  (:documentation "Stops monitoring all hosts for which monitoring was requested.")
+  (:handler #'%handle-unmonitor-all))
 
-(defrpc call-simulate-crash 5 :void :void
-  (:documentation "Simulate a crash. The NSM will release all its current state information and reinitialize itself, incrementing its state variable. It reads through its notify list and sends notifications."))
-(defhandler %handle-simulate-crash (void 5)
+;; -----------------------------------------
+
+(defun %handle-simulate-crash (void)
   (declare (ignore void))
   (incf *state*)
   (save-nsm-state)
   (notify-servers)
   nil)
 
+(defrpc call-simulate-crash 5 :void :void
+  (:documentation "Simulate a crash. The NSM will release all its current state information and reinitialize itself, incrementing its state variable. It reads through its notify list and sends notifications.")
+  (:handler #'%handle-simulate-crash))
+
+
+;; -------------------------------------------
 
 (defxtype* notify-arg ((:reader read-notify-arg) (:writer write-notify-arg))
   (:list :string 
          :int32
          (:varray* :octet 16)))
+
 (defun send-notification (notify-arg hostname program version proc &optional port)
   "Send a notification to the specifed host/program/version/proc. If PORT is not supplied, the portmapper program ion the remote machine is queried."
   ;; if no port specified, then use port-mapper to find it
@@ -281,12 +309,7 @@ The FUNCTION will be executed with arguments (hostname state private)."
             :protocol :udp
             :timeout nil))
 
-(defrpc call-notify 6
-  (:list :string :int32)
-  :void
-  (:arg-transformer (name state) (list name state))
-  (:documentation "This RPC is used to inform servers that our local state has changed. NAME should be the local hostname, STATE should be the local state number."))
-(defhandler %handle-notify (arg 6)
+(defun %handle-notify (arg)
   (destructuring-bind (hostname state) arg
     (let ((local-hostname (machine-instance)))
       (dolist (client *clients*)
@@ -308,5 +331,13 @@ The FUNCTION will be executed with arguments (hostname state private)."
 				  (my-id-proc id)
 				  (client-port client)))))))))
   nil)
+
+(defrpc call-notify 6
+  (:list :string :int32)
+  :void
+  (:arg-transformer (name state) (list name state))
+  (:documentation "This RPC is used to inform servers that our local state has changed. NAME should be the local hostname, STATE should be the local state number.")
+  (:handler #'%handle-notify))
+
 
 

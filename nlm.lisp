@@ -164,16 +164,23 @@
 ;; --------------------------------------
 
 ;; NULL 
-
-(defrpc call-null 0 :void :void
-  (:documentation "Test connectivity to the NLM server."))
-(defhandler %handle-null (void 0)
+(defun %handle-null (void)
   (declare (ignore void))
   nil)
+
+(defrpc call-null 0 :void :void
+  (:documentation "Test connectivity to the NLM server.")
+  (:handler #'%handle-null))
+
 
 ;; --------------------------------------
 
 ;; TEST ::  test whether a lock would be granted 
+
+;;(defun %handle-test (args)
+;;  (destructuring-bind (cookie exclusive alock) args
+;;    (declare (ignore exclusive alock))
+;;    (list cookie (make-xunion :granted nil))))
 
 (defrpc call-test 1 
   (:list netobj :boolean nlm-lock)
@@ -185,17 +192,21 @@
     (list cookie exclusive lock))
   (:documentation "Test whether the monitored lock is available to the client."))
 
-;;(defhandler %handle-test (args 1)
-;;  (destructuring-bind (cookie exclusive alock) args
-;;    (declare (ignore exclusive alock))
-;;    (list cookie (make-xunion :granted nil))))
-
 ;; ----------------------------------------
 
 ;; LOCK :: acquire a lock. If the lock is currently held elsewhere 
 ;; then a :BLOCKED response should be sent. Once the lock has become available
 ;; the server should sent a GRANTED message to the client, informing it that the 
 ;; lock has been granted to the client.
+
+(defun %handle-lock (args)
+  (with-slots (cookie exclusive alock) args
+    (let ((lock (acquire-lock (nlm-lock-fh alock)
+			      :cookie cookie
+			      :exclusive exclusive)))
+      (if lock 
+	  (list cookie :granted)
+	  (list cookie :blocked)))))
 
 (defrpc call-lock 2 
   (:list netobj :boolean :boolean nlm-lock :boolean :int32)
@@ -206,16 +217,9 @@
 
 If RECLAIM is true, the server will assume this is an attempt to re-establish a previous lock (for instance, after a server crash). During the grace-period, the server will only accept locks with RECLAIM of true.
 
-STATE contains the state of the client's NSM. This information is kept by the server implementation, so if the client crashes the server can determine which locks should be discarded by checking the state against the NSM crash notification sent by NSM."))
+STATE contains the state of the client's NSM. This information is kept by the server implementation, so if the client crashes the server can determine which locks should be discarded by checking the state against the NSM crash notification sent by NSM.")
+  (:handle #'%handle-lock))
 
-(defhandler %handle-lock (args 2)
-  (with-slots (cookie exclusive alock) args
-    (let ((lock (acquire-lock (nlm-lock-fh alock)
-			      :cookie cookie
-			      :exclusive exclusive)))
-      (if lock 
-	  (list cookie :granted)
-	  (list cookie :blocked)))))
 
 ;; -----------------------------------------
 
@@ -224,6 +228,13 @@ STATE contains the state of the client's NSM. This information is kept by the se
 ;; Semantically they are not the same, because CANCEL is typically 
 ;; used by the system to clean up clients that didn't exit properly.
 
+
+(defun %handle-cancel (args)
+  (destructuring-bind (cookie block exclusive alock) args
+    (declare (ignore block exclusive))
+    (release-lock (nlm-lock-fh alock))
+    (list cookie :granted)))
+
 (defrpc call-cancel 3 
   (:list netobj :boolean :boolean nlm-lock)
   (:list netobj nlm-stat)
@@ -231,34 +242,36 @@ STATE contains the state of the client's NSM. This information is kept by the se
     (list cookie block exclusive lock))
   (:documentation "Cancels an outstanding blocked lock request. If the client made a LOCK procedure call with BLOCKED true and the procedure was blocked by the server (it returned a status of :BLOCKED), then the client can cancel the outstanding lock request by using this procedure.
 
-The BLOCK, EXCLUSIVE and LOCK arguments must exactly match those in the corresponding LOCK request."))
-
-(defhandler %handle-cancel (args 3)
-  (destructuring-bind (cookie block exclusive alock) args
-    (declare (ignore block exclusive))
-    (release-lock (nlm-lock-fh alock))
-    (list cookie :granted)))
+The BLOCK, EXCLUSIVE and LOCK arguments must exactly match those in the corresponding LOCK request.")
+  (:handler #'%handle-cancel))
 
 ;; ------------------------------------------
 
 ;; UNLOCK :: release a lock 
+
+(defun %handle-unlock (args)
+  (destructuring-bind (cookie alock) args
+    (release-lock (nlm-lock-fh alock))
+    (list cookie :granted)))
 
 (defrpc call-unlock 4 
   (:list netobj nlm-lock)
   (:list netobj nlm-stat)
   (:arg-transformer (lock &key cookie)
     (list cookie lock))
-  (:documentation "Release a lock. The information in LOCK should match the information in the LOCK which created the lock."))
+  (:documentation "Release a lock. The information in LOCK should match the information in the LOCK which created the lock.")
+  (:handler #'%handle-unlock))
 
-(defhandler %handle-unlock (args 4)
-  (destructuring-bind (cookie alock) args
-    (release-lock (nlm-lock-fh alock))
-    (list cookie :granted)))
 
 ;; --------------------------------------------
 
 ;; GRANTED :: message sent from the NLM server to 
 ;; the client, informing it that it has now acquired the lock
+
+(defun %handle-granted (args)
+  (destructuring-bind (cookie exclusive alock) args
+    (declare (ignore exclusive alock))
+    (list cookie :granted)))
 
 ;; server NLM callback procedure to grant lock
 (defrpc call-granted 5 
@@ -266,12 +279,9 @@ The BLOCK, EXCLUSIVE and LOCK arguments must exactly match those in the correspo
   (:list netobj nlm-stat)
   (:arg-transformer (lock &key cookie exclusive)
     (list cookie exclusive lock))
-  (:documentation "This procedure is the callback from the server running NLM to the host that requested a lock that could not be immediately honoured."))
+  (:documentation "This procedure is the callback from the server running NLM to the host that requested a lock that could not be immediately honoured.")
+  (:handler #'%handle-granted))
 
-(defhandler %handle-granted (args 5)
-  (destructuring-bind (cookie exclusive alock) args
-    (declare (ignore exclusive alock))
-    (list cookie :granted)))
 
 ;; -----------------------------------------
 

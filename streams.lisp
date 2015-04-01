@@ -7,7 +7,7 @@
 ;; define a stream type to access remote files
 ;; general structure is copied from flexi-streams
 
-(defconstant +default-stream-buffer-size+ 1024)
+(defconstant +default-stream-buffer-size+ 4096)
 
 (defclass nfs-file-stream (trivial-gray-stream-mixin 
 			   fundamental-binary-input-stream 
@@ -216,7 +216,7 @@
 	   (apply #'nefarious.mount:call-unmount ,gpath ,gargs))))))
 
 (defmacro with-nfs-file ((var dhandle filename &rest call-args) &body body)
-  `(let ((,var (make-nfs-file-stream ,dhandle ,filename ,@call-args)))
+  `(let ((,var (make-nfs-file-stream ,dhandle ,filename :call-args (list ,@call-args))))
      ,@body))
 
 

@@ -51,29 +51,17 @@
 
 ;; -----------------------------------------------------
 ;; for testing connections 
-(defrpc call-null 0 :void :void)
 
-(defhandler %handle-null (void 0)
+(defun %handle-null (void)
   (declare (ignore void))
   nil)
 
+(defrpc call-null 0 :void :void
+  (:handler #'%handle-null))
+
 ;; -----------------------------------------------------
 ;; mount 
-
-(defrpc call-mount 1
-  dir-path
-  (:union mount-stat3
-    (:ok (:list fhandle3 (:varray frpc::auth-flavour)))
-    (otherwise :void))
-  (:arg-transformer (dpath) dpath)
-  (:transformer (res)
-    (case (xunion-tag res)
-      (:ok (destructuring-bind (dhandle auth-flavours) (xunion-val res)
-	     (values dhandle auth-flavours)))
-      (otherwise (error 'mount-error :stat (xunion-tag res)))))
-  (:documentation "Mount the share named by DPATH. Returns (values dhandle auth-flavours)."))
-
-(defhandler %handle-mount (dpath 1)
+(defun %handle-mount (dpath)
   "Find the exported directory with the export name DPATH and return its handle and authentication flavours."
   (let ((provider (nefarious:find-provider dpath)))
     (cond 
@@ -95,6 +83,21 @@
        (nefarious:nfs-log :error "No provider registered on path ~S" dpath)
        (make-xunion :inval nil)))))
 
+(defrpc call-mount 1
+  dir-path
+  (:union mount-stat3
+    (:ok (:list fhandle3 (:varray frpc::auth-flavour)))
+    (otherwise :void))
+  (:arg-transformer (dpath) dpath)
+  (:transformer (res)
+    (case (xunion-tag res)
+      (:ok (destructuring-bind (dhandle auth-flavours) (xunion-val res)
+	     (values dhandle auth-flavours)))
+      (otherwise (error 'mount-error :stat (xunion-tag res)))))
+  (:documentation "Mount the share named by DPATH. Returns (values dhandle auth-flavours).")
+  (:handler #'%handle-mount))
+
+
 ;; -----------------------------------------------------
 ;; dump -- return mount entries
 
@@ -108,16 +111,8 @@
   (mount mounting)
   (next mount-list))
 
-(defrpc call-dump 2 :void mount-list
-  (:transformer (res)
-    (do ((mount-list res (mount-body-next mount-list))
-	 (mlist nil))
-	((null mount-list) mlist)
-      (push (mount-body-mount mount-list) mlist)))
-  (:documentation "List all the currently mounted shares."))
-
 ;; return a list of all the mounts of all the clients 
-(defhandler %handle-dump (void 2)
+(defun %handle-dump (void)
   (declare (ignore void))
   (do ((mlist nil)
        (providers nefarious::*providers* (cdr providers)))
@@ -131,13 +126,19 @@
 		  mlist mbody)
 	    (setf mlist mbody))))))
 
+(defrpc call-dump 2 :void mount-list
+  (:transformer (res)
+    (do ((mount-list res (mount-body-next mount-list))
+	 (mlist nil))
+	((null mount-list) mlist)
+      (push (mount-body-mount mount-list) mlist)))
+  (:documentation "List all the currently mounted shares.")
+  (:handler #'%handle-dump))
+
+
 ;; -----------------------------------------------------
 ;; unmount -- remove mount entry 
-(defrpc call-unmount 3 dir-path :void
-  (:arg-transformer (dpath) dpath)
-  (:documentation "Unmount the share named by DPATH."))
-
-(defhandler %handle-unmount (dpath 3)
+(defun %handle-unmount (dpath)
   (let ((provider (nefarious:find-provider dpath)))
     (cond
       (provider
@@ -156,12 +157,15 @@
       (t 
        nil))))
 
+(defrpc call-unmount 3 dir-path :void
+  (:arg-transformer (dpath) dpath)
+  (:documentation "Unmount the share named by DPATH.")
+  (:handler #'%handle-unmount))
+
+
 ;; -----------------------------------------------------
 ;; unmount all -- remove all mount entries for the calling client 
-(defrpc call-unmount-all 4 :void :void
-  (:documentation "Unmount all shares currently mounted on the NFS server."))
-
-(defhandler %handle-unmount-all (void 4)
+(defun %handle-unmount-all (void)
   (declare (ignore void))
   ;; interate over all providers, those which have client in their clients
   ;; list should be unmounted
@@ -178,6 +182,11 @@
 	    (nefarious:nfs-log :error "Failed to unmount: ~A" e))))))
   nil)
 
+(defrpc call-unmount-all 4 :void :void
+  (:documentation "Unmount all shares currently mounted on the NFS server.")
+  (:handler #'%handle-unmount-all))
+
+
 ;; -----------------------------------------------------
 ;; export -- return export list 
 (defxtype* groups () (:optional group-node))
@@ -192,6 +201,19 @@
   (groups groups)
   (next exports))
 
+(defun %handle-export (void)
+  (declare (ignore void))
+  (let ((export-paths (mapcar #'nefarious:provider-path nefarious::*providers*)))
+    (when export-paths
+      (do ((ex nil)
+	   (epaths export-paths (cdr epaths)))
+	  ((null epaths) ex)
+	(let ((e (make-export-node :dir (car epaths))))
+	  (if ex
+	      (setf (export-node-next e) ex
+		    ex e)
+	      (setf ex e)))))))
+
 (defrpc call-exports 5 :void exports
   (:transformer (res)
     (do ((enodes res (export-node-next enodes))
@@ -204,17 +226,7 @@
                       ((null groups) glist)
                     (push (getf groups :name) glist)))
 	    elist)))
-  (:documentation "Returns a list of the exported filesystems from the NFS server. Each entry in the list is a plist with properties :DIR and :GROUPS."))
+  (:documentation "Returns a list of the exported filesystems from the NFS server. 
+Each entry in the list is a plist with properties :DIR and :GROUPS.")
+  (:handler #'%handle-export))
 
-(defhandler %handle-export (void 5)
-  (declare (ignore void))
-  (let ((export-paths (mapcar #'nefarious:provider-path nefarious::*providers*)))
-    (when export-paths
-      (do ((ex nil)
-	   (epaths export-paths (cdr epaths)))
-	  ((null epaths) ex)
-	(let ((e (make-export-node :dir (car epaths))))
-	  (if ex
-	      (setf (export-node-next e) ex
-		    ex e)
-	      (setf ex e)))))))
