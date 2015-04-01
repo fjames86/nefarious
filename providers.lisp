@@ -24,11 +24,13 @@
   "Register a provider to export on path EXPORT-PATH."
   (declare (type nfs-provider provider)
 	   (type string export-path))
+  (nfs-log :info "Registering provider on path ~A" export-path)
   (setf (provider-path provider) export-path)
   (let ((old (find-provider (provider-path provider))))
     (cond
       (old
        (warn "Replacing provider registered on path ~A." (provider-path provider))
+       (nfs-log :info "Replacing provider registered on path ~A." (provider-path provider))
        (setf (provider-id provider) (provider-id old)
 	     *providers* (substitute provider old *providers*)))
       (t 

@@ -1,6 +1,7 @@
 ;;;; Copyright (c) Frank James 2015 <frank.a.james@gmail.com>
 ;;;; This code is licensed under the MIT license.
 
+;; FIXME: this just doesn't work and is totally broken. It needs rewriting.
 
 (in-package #:nefarious)
 
