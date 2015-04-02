@@ -35,18 +35,6 @@ in NEFARIOUS.MOUNT package and the NFS messages in NEFARIOUS package. For exampl
 (nfs.mount:call-unmount "/" :host "myhost" :protocol :udp)
 ```
 
-### 2.1 NFS file streams
-
-A stream type which reads/writes to remote files, NFS-FILE-STREAM.
-
-```
-(with-nfs-mount (dhandle "/" :host "xxx")
-  (with-nfs-file (f dhandle "foo.txt" :host "xxx")
-    (let ((buffer (make-array 16)))
-      (read-sequence buffer f)
-      buffer)))
-```
-
 ## 3. Server 
 
 In order for the server to actually export any filesystems over NFS, users should first register
@@ -137,6 +125,7 @@ something better. Please do not expect high performance or a bug-free experience
 * The NSM protocol, which supports state change notifications, has been implemented but has not been rigorously tested.
 * The NLM protocol, which is used to implement file locking, has not been implemented.
 * Nefarious, like frpc, uses [pounds](https://github.com/fjames86/pounds) for debug logging. 
+* Would be nice to have a stream class to proxy reads/writes to the remote filesystem.
 
 If running nefarious on systems with a port-mapper program already running 
 (such as all typical Linux systems), you should 

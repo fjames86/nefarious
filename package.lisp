@@ -58,13 +58,7 @@
 	  #:start
 	  #:stop
 
-	  ;; client
-	  #:with-nfs-mount
-	  #:with-nfs-file
-
-	  ;; client streams
-	  #:nfs-file-stream
-	  #:make-nfs-file-stream
+	  ;; client utilities
 	  #:copy-remote-file 
 	  #:copy-remote-directory 
 

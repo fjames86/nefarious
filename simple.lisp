@@ -118,7 +118,7 @@ the handles list. Returns the newly allocated handle."
     handle))
 
 (defun allocate-dhandle (provider dhandle name)
-
+  "allocate a directory handle"
   (let ((lc (char name (1- (length name)))))
     (unless (string= lc #\/)
       (setf name (concatenate 'string name "/"))))
