@@ -116,6 +116,15 @@ when the status change is received.
 The local server must also persist a state sequence number. By default nefarious uses the file named by 
 *default-nsm-pathspec*. You should ensure this has been set before starting the nefarious server. 
 
+## TODO
+
+* Bad things will happen when calling READ-DIR and READ-DIR-PLUS on directories with lots of files. 
+The specifications requires that the server be able to break these calls up into smaller pieces, so 
+that their packed return vales fit within a specified number of bytes. But at the moment the count parameter
+is ignored and it will just attempt to pack all the directory file names into the return buffer. If 
+that is more than count, then the client will be upset. If it's more than 64k then nefarious will hit and eof error
+while writing to the buffer stream.
+
 ## 5. Notes
 
 * Nefarious is based on [frpc](https://github.com/fjames86/frpc), the underlying ONC-RPC implementation.

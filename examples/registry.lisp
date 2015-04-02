@@ -488,7 +488,7 @@
 
 ;; for nfs
 (defmethod nfs-provider-attrs ((provider registry-provider) fh)
-  (log:debug "get-attrs: ~A" fh)
+  (nfs-log :trace "get-attrs: ~A" fh)
   (let ((rhandle (find-rhandle provider :fh fh)))
     (if rhandle
 	(let* ((name (rhandle-name rhandle))
@@ -540,7 +540,7 @@
 	     ;; not a key, try a value
 	     (let ((handle (make-rhandle :rhandle dhandle
 					 :name name)))
-	       (log:debug "key: ~A name: ~A" (rhandle-key dhandle) name)
+	       (nfs-log :debug "key: ~A name: ~A" (rhandle-key dhandle) name)
 	       (cond
 		 ((rhandle-exists-p handle)
 		  (let ((h (allocate-rhandle provider 
@@ -562,7 +562,7 @@
 				  (rhandle-key handle))))
 	      (values (subseq bytes offset) t))
 	  (error (e)
-	    (log:debug "~A" e)
+	    (nfs-log :debug "~A" e)
 	    (error 'nfs-error :stat :noent)))
 	(error 'nfs-error :stat :bad-handle))))
 
@@ -577,7 +577,7 @@
 			       :subkey (rhandle-key handle)
 			       :type :binary)
 	  (error (e)
-	    (log:debug "~A" e)
+	    (nfs-log :debug "~A" e)
 	    (error 'nfs-error :stat :noent)))
 	(error 'nfs-error :stat :bad-handle))))
 
@@ -595,7 +595,7 @@
 				 :subkey (rhandle-key handle)
 				 :type :binary)
 	    (error (e)
-	      (log:debug "~A" e)
+	      (nfs-log :debug "~A" e)
 	      (error 'nfs-error :noent))))
 	(error 'nfs-error :bad-handle))))
 
@@ -607,7 +607,7 @@
 	    (with-reg-key (k (rhandle-key dhandle) :key (rhandle-tree dhandle))
 	      (reg-delete-value k name))
 	  (error (e)
-	    (log:debug "~A" e)
+	    (nfs-log :debug "~A" e)
 	    (error 'nfs-error :stat :noent)))
 	(error 'nfs-error :stat :bad-handle))))
 
@@ -629,7 +629,7 @@
 	     (mapcar #'car (reg-enum-value (or (rhandle-key dhandle) "")
 					   (rhandle-tree dhandle))))			   
 	  (error (e)
-	    (log:debug "~A" e)
+	    (nfs-log :debug "~A" e)
 	    (error 'nfs-error :stat :noent)))
 	(error 'nfs-error :stat :bad-handle))))
 
@@ -648,7 +648,7 @@
 				 :type :binary)
 	      (rhandle-fh handle))
 	  (error (e)
-	    (log:debug "~A" e)
+	    (nfs-log :debug "~A" e)
 	    (error 'nfs-error :stat :noent)))
 	(error 'nfs-error :stat :bad-handle))))
 
@@ -661,7 +661,7 @@
 	      (reg-delete-tree (rhandle-tree dhandle)
 			       (rhandle-key dhandle))
 	    (error (e)
-	      (log:debug "~A" e)
+	      (nfs-log :debug "~A" e)
 	      (error 'nfs-error :stat :server-fault)))
 	  (error 'nfs-error :stat :bad-handle))))
 
