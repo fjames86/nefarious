@@ -152,13 +152,17 @@ created symlink."))
 ;; directory operators
 (defgeneric nfs-provider-read-dir (provider dhandle &key cookie verf count &allow-other-keys)
   (:documentation "Enumerate the names of all objects in the directory. 
-Returns (values filename* cookie* verifier). The cookie* and verifier are optional, but are strongly 
+Returns (values filename* cookie* verifier morep). The cookie* and verifier are optional, but are strongly 
 encouraged to be supported.
+
+If the returned list of files is the complete directory contents then morep should be nil. Otherwise, 
+if there are more files remaining to be read, morep should be T.
 
 Each cookie, if returned, corresponds to the filename in the same position and is used by
 subsequent calls to continue enumerating the directory. 
 
-The verifier is the key used to resume enumeration from the previous call."))
+The verifier is the key used to resume enumeration from the previous call.
+"))
 (defmethod nfs-provider-read-dir ((provider nfs-provider) dhandle &key)
   (error 'nfs-error :stat :access))
 

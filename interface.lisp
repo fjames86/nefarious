@@ -808,12 +808,12 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
       (cond
 	((and provider (client-mounted-p provider *rpc-remote-host*))
 	 (handler-case 
-	     (multiple-value-bind (files cookies verifier) 
+	     (multiple-value-bind (files cookies verifier morep) 
 		 (nfs-provider-read-dir provider dhandle
 					:cookie cookie
 					:verf verf
 					:count count)
-	       (let ((dlist3 (make-dir-list3 :eof t)))
+	       (let ((dlist3 (make-dir-list3 :eof (not morep))))
 		 (do ((%files files (cdr %files))
 		      (%cookies cookies (cdr %cookies))
 		      (fileid 1 (1+ fileid)))
@@ -882,17 +882,17 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
 ;; READDIRPLUS3res NFSPROC3_READDIRPLUS(READDIRPLUS3args) = 17;
 (defun %handle-read-dir-plus (args)
   (destructuring-bind (dh cookie verf count max) args
-    (declare (ignore cookie verf count max))
+    (declare (ignore count))
     (destructuring-bind (provider dhandle) (fh-provider-handle dh)
       (cond
 	((and provider (client-mounted-p provider *rpc-remote-host*))
 	 (handler-case 
-	     (multiple-value-bind (files cookies verifier) 
+	     (multiple-value-bind (files cookies verifier morep) 
 		 (nfs-provider-read-dir provider dhandle
 					:cookie cookie
 					:verf verf
-					:count count)
-	       (let ((dlist3 (make-dir-list3-plus :eof t)))
+					:count max)
+	       (let ((dlist3 (make-dir-list3-plus :eof (not morep))))
 		 (do ((%files files (cdr %files))
 		      (%cookies cookies (cdr %cookies))
 		      (fileid 0 (1+ fileid)))
@@ -905,6 +905,7 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
 						(make-entry3-plus :fileid fileid
 								  :name name
 								  :cookie (or (car %cookies) 0)
+								  :attrs (nfs-provider-attrs provider handle)
 								  :handle (provider-handle-fh provider handle))
 						:next-entry (dir-list3-plus-entries dlist3))))))
 		 (make-xunion :ok 
