@@ -116,16 +116,20 @@ when the status change is received.
 The local server must also persist a state sequence number. By default nefarious uses the file named by 
 *default-nsm-pathspec*. You should ensure this has been set before starting the nefarious server. 
 
-## TODO
+## 5. TODO
 
 * Bad things will happen when calling READ-DIR and READ-DIR-PLUS on directories with lots of files. 
 The specifications requires that the server be able to break these calls up into smaller pieces, so 
-that their packed return vales fit within a specified number of bytes. But at the moment the count parameter
-is ignored and it will just attempt to pack all the directory file names into the return buffer. If 
-that is more than count, then the client will be upset. If it's more than 64k then nefarious will hit and eof error
-while writing to the buffer stream.
+that their packed return vales fit within a specified number of bytes. This feels a bit wrong because the XDR 
+serialization lives in the RPC layer, not at the application layer. As a result there is no way for the nfs 
+server to "know" anything about the serialization (nor should it).
 
-## 5. Notes
+Nevertheless, we need to properly support it. The relevant generic function, nfs-provider-read-dir, accepts
+a cookie and cookie-verifier, as well as a count parameter. It can return the filenames, in addition to file cookies
+and a verifier. At present this is optional, although strongly recommended. The simple provider ignores the cookie 
+and verifier, and does not return cookies or a verifier. So it does not scale to large directories.
+
+## 6. Notes
 
 * Nefarious is based on [frpc](https://github.com/fjames86/frpc), the underlying ONC-RPC implementation.
 * The primary purpose of both projects is to get something simple which works, rather than a high-performance, 
@@ -142,7 +146,7 @@ not run the port-mapper program from Lisp. Set the PORT-MAPPER option to NFS:STA
 This will register the nefarious 
 RPC programs with the local portmapper instead of the Lisp port mapper. 
 
-## 6. License
+## 7. License
 
 Released under the terms of the MIT license.
 
