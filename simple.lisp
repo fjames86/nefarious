@@ -301,7 +301,7 @@ be a string naming the mount-point that is exported by NFS."
 	  nil)
 	(error 'nfs-error :stat :bad-handle))))
 
-(defmethod nfs-provider-read-dir ((provider simple-provider) dh)
+(defmethod nfs-provider-read-dir ((provider simple-provider) dh &key)
   "Returns a list of all object (file and directory) names in the directory."
   (let ((dhandle (find-handle provider dh)))
     (unless dhandle (error 'nfs-error :stat :bad-handle))

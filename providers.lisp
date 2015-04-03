@@ -150,9 +150,16 @@ created symlink."))
   (error 'nfs-error :stat :access))
 
 ;; directory operators
-(defgeneric nfs-provider-read-dir (provider dhandle)
-  (:documentation "Returns a list of all object (file and directory) names in the directory."))
-(defmethod nfs-provider-read-dir ((provider nfs-provider) dhandle)
+(defgeneric nfs-provider-read-dir (provider dhandle &key cookie verf count &allow-other-keys)
+  (:documentation "Enumerate the names of all objects in the directory. 
+Returns (values filename* cookie* verifier). The cookie* and verifier are optional, but are strongly 
+encouraged to be supported.
+
+Each cookie, if returned, corresponds to the filename in the same position and is used by
+subsequent calls to continue enumerating the directory. 
+
+The verifier is the key used to resume enumeration from the previous call."))
+(defmethod nfs-provider-read-dir ((provider nfs-provider) dhandle &key)
   (error 'nfs-error :stat :access))
 
 (defgeneric nfs-provider-create-dir (provider dhandle name)

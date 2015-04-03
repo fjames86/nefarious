@@ -804,25 +804,29 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
 
 (defun %handle-read-dir (args)
   (destructuring-bind (dh cookie verf count) args
-    (declare (ignore cookie verf count))
     (destructuring-bind (provider dhandle) (fh-provider-handle dh)
       (cond
 	((and provider (client-mounted-p provider *rpc-remote-host*))
 	 (handler-case 
-	     (let ((files (nfs-provider-read-dir provider dhandle))
-		   (dlist3 (make-dir-list3 :eof t)))
-	       (do ((%files files (cdr %files))
-		    (fileid 0 (1+ fileid)))
-		   ((null %files))
-		 (let ((name (car %files)))
+	     (multiple-value-bind (files cookies verifier) 
+		 (nfs-provider-read-dir provider dhandle
+					:cookie cookie
+					:verf verf
+					:count count)
+	       (let ((dlist3 (make-dir-list3 :eof t)))
+		 (do ((%files files (cdr %files))
+		      (%cookies cookies (cdr %cookies))
+		      (fileid 1 (1+ fileid)))
+		     ((null %files))
 		   (setf (dir-list3-entries dlist3)
 			 (make-%entry3 :entry (make-entry3 :fileid fileid
-							   :name name)
-				       :next-entry (dir-list3-entries dlist3)))))
-	       (make-xunion :ok 
-			    (list (maybe-provider-attrs provider dhandle)
-				  (make-cookie-verf3)
-				  dlist3)))
+							   :cookie (or (car %cookies) 0)
+							   :name (car %files))
+				       :next-entry (dir-list3-entries dlist3))))
+		 (make-xunion :ok 
+			      (list (maybe-provider-attrs provider dhandle)
+				    (or verifier (make-cookie-verf3))
+				    dlist3))))
 	   (nfs-error (e)
 	     (nfs-log :info "~A" e)
 	     (make-xunion (nfs-error-stat e) 
@@ -883,22 +887,30 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
       (cond
 	((and provider (client-mounted-p provider *rpc-remote-host*))
 	 (handler-case 
-	     (let ((files (nfs-provider-read-dir provider dhandle))
-		   (dlist3 (make-dir-list3-plus :eof t)))
-	       (do ((%files files (cdr %files))
-		    (fileid 0 (1+ fileid)))
-		   ((null %files))
-		 (let* ((name (car %files))
-			(handle (nfs-provider-lookup provider dhandle name)))
-		   (when handle 
-		     (setf (dir-list3-plus-entries dlist3)
-			   (make-%entry3-plus :entry 
-					      (make-entry3-plus :fileid fileid
-								:name name
-								:handle (provider-handle-fh provider handle))
-					      :next-entry (dir-list3-plus-entries dlist3))))))
-	       (make-xunion :ok 
-			    (list nil (make-cookie-verf3) dlist3)))
+	     (multiple-value-bind (files cookies verifier) 
+		 (nfs-provider-read-dir provider dhandle
+					:cookie cookie
+					:verf verf
+					:count count)
+	       (let ((dlist3 (make-dir-list3-plus :eof t)))
+		 (do ((%files files (cdr %files))
+		      (%cookies cookies (cdr %cookies))
+		      (fileid 0 (1+ fileid)))
+		     ((null %files))
+		   (let* ((name (car %files))
+			  (handle (nfs-provider-lookup provider dhandle name)))
+		     (when handle 
+		       (setf (dir-list3-plus-entries dlist3)
+			     (make-%entry3-plus :entry 
+						(make-entry3-plus :fileid fileid
+								  :name name
+								  :cookie (or (car %cookies) 0)
+								  :handle (provider-handle-fh provider handle))
+						:next-entry (dir-list3-plus-entries dlist3))))))
+		 (make-xunion :ok 
+			      (list (nfs-provider-attrs provider dhandle)
+				    (or verifier (make-cookie-verf3))
+				    dlist3))))
 	   (nfs-error (e)
 	     (nfs-log :info "~A" e)
 	     (make-xunion (nfs-error-stat e) nil))

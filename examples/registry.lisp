@@ -615,7 +615,7 @@
   "Rename the file named by the FROM-DHANDLE/FROM-NAME."
   (error 'nfs-error :stat :server-fault))
 
-(defmethod nfs-provider-read-dir ((provider registry-provider) dh)
+(defmethod nfs-provider-read-dir ((provider registry-provider) dh &key)
   "Returns a list of all object (file and directory) names in the directory."
   (let ((dhandle (find-rhandle provider :fh dh)))
     (if dhandle
