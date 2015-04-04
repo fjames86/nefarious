@@ -96,7 +96,7 @@
 
 ;; -----------------------------------------
 
-(defparameter *default-nsm-pathspec* "nsm.dat")
+(defparameter *default-nsm-pathspec* (merge-pathnames "nsm.dat" (user-homedir-pathname)))
 
 (defparameter *servers* nil
   "List of servers to send notifications to when our state changes.")

@@ -118,7 +118,7 @@ The local server must also persist a state sequence number. By default nefarious
 
 ## 5. TODO
 
-* Bad things will happen when calling READ-DIR and READ-DIR-PLUS on directories with lots of files. 
+Bad things will happen when calling READ-DIR and READ-DIR-PLUS on directories with lots of files. 
 The specifications requires that the server be able to break these calls up into smaller pieces, so 
 that their packed return vales fit within a specified number of bytes. This feels a bit wrong because the XDR 
 serialization lives in the RPC layer, not at the application layer. As a result there is no way for the nfs 
@@ -127,7 +127,8 @@ server to "know" anything about the serialization (nor should it).
 Nevertheless, we need to properly support it. The relevant generic function, nfs-provider-read-dir, accepts
 a cookie and cookie-verifier, as well as a count parameter. It can return the filenames, in addition to file cookies
 and a verifier. At present this is optional, although strongly recommended. The simple provider ignores the cookie 
-and verifier, and does not return cookies or a verifier. So it does not scale to large directories.
+and verifier, and does not return cookies or a verifier. So it does not scale to large directories. Also, experiements
+show that this is only a serious issue with directories with roughly 1000 files or more. 
 
 ## 6. Notes
 
