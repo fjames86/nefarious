@@ -5,32 +5,35 @@
 (defpackage #:nefarious.block
   (:use #:cl #:frpc #:nefarious #:cffi)
   (:nicknames #:nfs.block)
-  (:export #:make-block-provider))
+  (:export #:make-block-provider
+           #:block-provider))
 
 (in-package #:nefarious.block)
 
 ;; This example shows how to export block storage devices using NFS
 ;; For simplicity, the underlying storage is provided by a mmaped file (see the library pounds).
 
-
 (defclass block-provider (nfs-provider)
   ((mappings :initarg :mappings :reader mappings)
    (mount-fh :initform #(0 0 0 0) :reader mount-fh)))
-   
+
+(defmethod initialize-instance :after ((provider block-provider) &key)
+  (setf (slot-value provider 'mappings)
+        (do ((%mappings (mappings provider) (cdr %mappings))
+             (i 1 (1+ i))
+             (maps nil))
+            ((null %mappings) maps)
+          (push (list :fh (pack #'frpc::write-uint32 i)
+                      :mapping (car %mappings)
+                      :stream (pounds:make-mapping-stream (car %mappings))
+                      :id i
+                      :name (format nil "dev~A" i))
+                maps))))
+
 (defun make-block-provider (mappings)
   "Mapping should be a list of POUNDS mapping structures, as returned from a call to OPEN-MAPPING."
   (make-instance 'block-provider 
-		 :mappings 
-		 (do ((%mappings mappings (cdr mappings))
-		      (i 1 (1+ i))
-		      (maps nil))
-		     ((null %mappings) maps)
-		   (push (list :fh (pack #'frpc::write-uint32 i)
-			       :mapping (car %mappings)
-			       :stream (pounds:make-mapping-stream (car %mappings))
-			       :id i
-			       :name (format nil "dev~A" i))
-			 maps))))
+                 :mappings mappings))
 
 (defun find-mapping (provider &key fh name)
   (find-if (lambda (mapping)
