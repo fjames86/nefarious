@@ -15,6 +15,9 @@
   ((node :initform nil :initarg :remote-node :reader remote-node)))
 
 (defun make-mirror-provider (mapping remote-node)
+  ;; we should first mount the remote side so we can write to it 
+  (nfs.mount:call-mount "/mirror" :host remote-node)
+  ;; return the instance
   (make-instance 'mirror-provider 
                  :mappings (list mapping)
                  :remote-node remote-node))
