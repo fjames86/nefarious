@@ -13,16 +13,19 @@
 
 (defclass mirror-provider (block-provider)
   ((node :initform nil :initarg :remote-node :reader remote-node)
-   (rh :initarg :rh :reader remote-handle)))
+   (rh :initarg :rh :accessor remote-handle)
+   (share :initarg :share :reader remote-share)))
 
 (defun make-mirror-provider (mapping remote-node remote-share)
   ;; we should first mount the remote side so we can write to it 
-  (let ((rh (nfs.mount:call-mount remote-share :host remote-node)))
+  (let ((rh (ignore-errors (nfs.mount:call-mount remote-share :host remote-node))))
     ;; return the instance
     (make-instance 'mirror-provider 
                    :mappings (list mapping)
                    :remote-node remote-node
-                   :rh rh)))
+                   :rh rh
+                   :share remote-share)))
+                  
 
 ;; we read locally, this is handled by the block provider 
 
@@ -31,6 +34,9 @@
 ;; obviously this is slow but we don't care about performance
 (defmethod nfs-provider-write :before ((provider mirror-provider) handle offset bytes)
   ;; write to the remote side. obviously this could fail if the remote side is uncontactable 
+  (unless (remote-handle provider)
+    (let ((rh (nfs.mount:call-mount (remote-share provider) :host (remote-node provider))))
+      (setf (remote-handle provider) rh)))
   (call-write (remote-handle provider) offset bytes :host (remote-node provider)))
 
 ;; basically all the other methods can be handled by the block provider
