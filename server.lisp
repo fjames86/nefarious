@@ -17,10 +17,7 @@ When NSM is non-nil, the NSM program, which facilitates server state change noti
 
 If PORTS is supplied, it shouild be a list of integers specifying the port numbers to listen on (TCP and UDP will be used). Otherwise port *RPC-PORT* is used, which defaults to 2049.
 
-"
-  ;; make a new server instance
-  (setf *server* (make-rpc-server))
-  
+"  
   ;; if no ports specified, use the default port
   (unless ports 
     (setf ports (list *nfs-port*)))
@@ -32,6 +29,9 @@ If PORTS is supplied, it shouild be a list of integers specifying the port numbe
 
   (nfs-log :info "Starting server on ports ~A" ports)
 
+  ;; make a new server instance
+  (setf *server* (make-rpc-server :tcp-ports ports :udp-ports ports))
+
   ;; setup the port mappings
   (port-mapper:add-all-mappings ports ports 
                                 :rpc (not port-mapper))
@@ -40,9 +40,7 @@ If PORTS is supplied, it shouild be a list of integers specifying the port numbe
   (when nsm (nsm:init-nsm))
   
   ;; start the RPC server 
-  (start-rpc-server *server* 
-		    :tcp-ports ports
-		    :udp-ports ports))
+  (start-rpc-server *server*))
 
 (defun stop (&key (port-mapper #+(or windows win32)t #-(or windows win32)nil))
   "Stop the NFS server. If PORT-MAPPER is nil, it is assumed Lisp is not running the port mapper program and instead the local port-mapper is communicated with using RPC."
