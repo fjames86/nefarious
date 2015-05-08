@@ -10,7 +10,9 @@
 ;;; A potential usecase might be to aid interactive development with a remote Lisp system.
 
 (defpackage #:nefarious.upload 
-  (:use #:cl #:nefarious #:frpc))
+  (:use #:cl #:nefarious #:frpc)
+  (:export #:make-uploader
+	   #:upload-changes))
 
 (in-package #:nefarious.upload)
 
@@ -43,6 +45,8 @@
     (setf h (logxor h (ash h -6)))))
 
 (defun upload-changes (file)
+  "Push changes to the file out to the remote file. 
+FILE ::= a file uploader structure, as returned from MAKE-UPLOADER."
   (declare (type file file))
   (with-open-file (f (file-pathspec file) :direction :input :element-type '(unsigned-byte 8))
     (if (= (file-write-date f) (file-timestamp file))
@@ -67,11 +71,19 @@
 		  ;; hashes differ, push changes
 		  (nfs:call-write (file-handle file)
 				  offset
-				  (if (= n 4096) buffer (subseq buffer 0 n))
+				  buffer 
+				  :end (unless (= n 4096) n)
 				  :client (file-client file))))))))))
 
 
 (defun make-uploader (pathspec handle client)
+  "Make a file uploader which can push changes out to the remote file.
+PATHSPEC ::= path of the local file we are tracking
+HANDLE ::= NFS handle of the remote file to push changes to
+CLIENT ::= rpc-client instance representing the NFS server 
+
+Returns the uploader structure to use in further calls to UPLOAD-CHANGES.
+"
   (declare (type rpc-client client))
   (let ((file (make-file :pathspec pathspec
 			 :client client
