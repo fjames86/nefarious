@@ -124,7 +124,7 @@
 (defun get-file-information (pathspec)
   (let ((path (substitute #\\ #\/ (format nil "~A" (truename pathspec))))
         (info (make-file-information)))
-    (nefarious:nfs-log :info "fileinfo: ~A" path)
+    (nefarious:nfs-log :trace "fileinfo: ~A" path)
     (flet ((getinfo ()
 	     (let ((handle (with-foreign-string (p path)
 			     (%create-file path 

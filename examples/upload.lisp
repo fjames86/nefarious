@@ -23,14 +23,12 @@
   size
   hash)
   
-(defstruct file 
-  name
-  size
-  blocks)
-
-(defstruct monitor 
-  directory 
-  files)
+(defstruct file
+  pathspec
+  blocks
+  timestamp
+  handle
+  client)
 
 (defun hash (array &key (start 0) end)
   (do ((h 0 (mod h (expt 2 32)))
@@ -44,34 +42,41 @@
     (setf h (ash h 10))
     (setf h (logxor h (ash h -6)))))
 
-(defun file-blocks (pathspec)
-  (with-open-file (f pathspec :direction :input :element-type '(unsigned-byte 8))
-    (let ((size (file-length f))
-          (buffer (make-array 4096 :element-type '(unsigned-byte 8) :initial-element 0)))
-      (do ((offset 0 (+ offset 4096))
-           (blocks nil))
-          ((>= offset size) (nreverse blocks))
-        (let ((n (read-sequence buffer f)))
-          (push (make-fblock :offset offset
-                            :size n
-                            :hash (hash buffer :start 0 :end n))
-                blocks))))))
+(defun upload-changes (file)
+  (declare (type file file))
+  (with-open-file (f (file-pathspec file) :direction :input :element-type '(unsigned-byte 8))
+    (if (= (file-write-date f) (file-timestamp file))
+	file 
+	(let ((size (file-length f))
+	      (buffer (make-array 4096 :element-type '(unsigned-byte 8) :initial-element 0)))
+	  (do ((offset 0 (+ offset 4096))
+	       (blocks nil)
+	       (oblocks (file-blocks file) (cdr oblocks)))
+	      ((>= offset size) 
+	       (setf (file-blocks file) (nreverse blocks)
+		     (file-timestamp file) (file-write-date (file-pathspec file)))
+	       file)
+	    (let* ((n (read-sequence buffer f))
+		   (hash (hash buffer :start 0 :end n)))
+	      (push (make-fblock :offset offset
+				 :size n
+				 :hash hash)
+		    blocks)
+	      (let ((ob (car oblocks)))
+		(when (and ob (not (= (fblock-hash ob) hash)))
+		  ;; hashes differ, push changes
+		  (nfs:call-write (file-handle file)
+				  offset
+				  (if (= n 4096) buffer (subseq buffer 0 n))
+				  :client (file-client file))))))))))
 
 
-;; (defun push-diffs (client pathspec blocks)
-;;   (let ((new-blocks (file-blocks pathspec)))
-;;     (do ((old-blocks blocks (cdr old-blocks))
-;;          (new-blocks new-blocks (cdr new-blocks)))
-;;         ((and (null old-blocks) (null new-blocks)))
-;;       (let ((old (car old-blocks))
-;;             (new (car new-blocks)))
-;;         (cond
-;;           ((and old new
-;;                 (= (fblock-offset old) (fblock-offset new))
-;;                 (= (fblock-size old) (fblock-size new))
-;;                 (= (fblock-hash old) (fblock-hash new)))
-;;            ;; the same, do nothing
-;;            )
-;;           (t 
-;;            ;; somethnig different, push the block out 
-;;            (
+(defun make-uploader (pathspec handle client)
+  (declare (type rpc-client client))
+  (let ((file (make-file :pathspec pathspec
+			 :client client
+			 :timestamp 0
+			 :handle handle)))
+    (upload-changes file)))
+
+

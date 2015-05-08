@@ -342,13 +342,34 @@ the end of the file was reached.")
 	(t 
 	 (make-xunion :bad-handle (make-wcc-data)))))))
 
+;; define a new type so that we can write a subset of the array without extra consing 
+(defxtype octet-array-start-end ()
+  ((stream)
+   ;; when reading, just cons a new vector 
+   (frpc::read-octet-array stream)) 
+  ((stream val)
+   ;; when writing, if a list of 3 values is passed in then write a subset of the array 
+   (etypecase val
+     (vector (frpc::write-octet-array stream val))
+     (list 
+      (destructuring-bind (val start end) val
+	(declare (type vector val)
+		 (type integer start)
+		 (type (or null integer) end))
+	(frpc::write-octet-array stream val :start (or start 0) :end end))))))
+
 (defrpc call-write 7 
-  (:list nfs-fh3 offset3 count3 stable-how (:varray* :octet))
+  (:list nfs-fh3 offset3 count3 stable-how octet-array-start-end) ;;(:varray* :octet)
   (:union nfs-stat3
     (:ok (:list wcc-data count3 stable-how write-verf3))
     (otherwise wcc-data))
-  (:arg-transformer (handle offset data &key (stable :file-sync))
-    (list handle offset (length data) stable data))
+  (:arg-transformer (handle offset data &key (stable :file-sync) (start 0) end)
+    (list handle 
+	  offset 
+	  (- (or end (length data))
+	     start)
+	  stable 
+	  (list data start end)))
   (:transformer (res)
     (if (eq (xunion-tag res) :ok)
 	(destructuring-bind (wcc count stable wverf) (xunion-val res)
