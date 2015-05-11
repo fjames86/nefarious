@@ -16,12 +16,13 @@
 
 (in-package #:nefarious.mount)
 
-(defconstant +mount-program+ 100005)
-(defconstant +mount-version+ 3)
+;;(defconstant +mount-program+ 100005)
+;;(defconstant +mount-version+ 3)
 
 (defparameter *mount-port* 635)
 
-(use-rpc-program +mount-program+ +mount-version+)
+;;(use-rpc-program +mount-program+ +mount-version+)
+(defprogram nfs.mount 100005)
 (use-rpc-host '*rpc-host* 2049)
 
 (defconstant +mount-path-len+ 1024)
@@ -57,6 +58,7 @@
   nil)
 
 (defrpc call-null 0 :void :void
+  (:program nfs.mount 3)
   (:handler #'%handle-null))
 
 ;; -----------------------------------------------------
@@ -88,6 +90,7 @@
   (:union mount-stat3
     (:ok (:list fhandle3 (:varray frpc::auth-flavour)))
     (otherwise :void))
+  (:program nfs.mount 3)
   (:arg-transformer (dpath) dpath)
   (:transformer (res)
     (case (xunion-tag res)
@@ -127,6 +130,7 @@
 	    (setf mlist mbody))))))
 
 (defrpc call-dump 2 :void mount-list
+  (:program nfs.mount 3)
   (:transformer (res)
     (do ((mount-list res (mount-body-next mount-list))
 	 (mlist nil))
@@ -158,6 +162,7 @@
        nil))))
 
 (defrpc call-unmount 3 dir-path :void
+  (:program nfs.mount 3)
   (:arg-transformer (dpath) dpath)
   (:documentation "Unmount the share named by DPATH.")
   (:handler #'%handle-unmount))
@@ -183,6 +188,7 @@
   nil)
 
 (defrpc call-unmount-all 4 :void :void
+  (:program nfs.mount 3)
   (:documentation "Unmount all shares currently mounted on the NFS server.")
   (:handler #'%handle-unmount-all))
 
@@ -215,6 +221,7 @@
 	      (setf ex e)))))))
 
 (defrpc call-exports 5 :void exports
+  (:program nfs.mount 3)
   (:transformer (res)
     (do ((enodes res (export-node-next enodes))
 	 (elist nil))

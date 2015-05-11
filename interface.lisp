@@ -10,7 +10,8 @@
 (defun maybe-provider-attrs (provider handle)
   (ignore-errors (nfs-provider-attrs provider handle)))
 
-(use-rpc-program +nfs-program+ +nfs-version+)
+;;(use-rpc-program +nfs-program+ +nfs-version+)
+(defprogram nfs 100003)
 (use-rpc-host '*rpc-host* 2049)
 
 ;; ------------------------------------------------------
@@ -21,6 +22,7 @@
   nil)
 
 (defrpc call-null 0 :void :void
+  (:program nfs 3)
   (:documentation "Test connectivity to the server.")
   (:handler #'%handle-null))
 
@@ -49,6 +51,7 @@
   (:union nfs-stat3
     (:ok fattr3)
     (otherwise :void))
+  (:program nfs 3)
   (:arg-transformer (handle) handle)
   (:transformer (res)
     (if (eq (xunion-tag res) :ok)
@@ -93,6 +96,7 @@
   (:union nfs-stat3
     (:ok wcc-data)
     (otherwise wcc-data))
+  (:program nfs 3)
   (:arg-transformer (handle attr &key time) (list handle attr time))
   (:transformer (res)
     (if (eq (xunion-tag res) :ok)
@@ -133,6 +137,7 @@
   (:union nfs-stat3
     (:ok (:list nfs-fh3 post-op-attr post-op-attr))
     (otherwise post-op-attr))
+  (:program nfs 3)
   (:arg-transformer (dhandle filename) 
     (make-dir-op-args3 :dir dhandle :name filename))
   (:transformer (res)
@@ -194,6 +199,7 @@
   (:union nfs-stat3 
     (:ok (:list post-op-attr :uint32))
     (otherwise post-op-attr))
+  (:program nfs 3)
   (:arg-transformer (handle access)
     (list handle
 	  (etypecase access
@@ -237,6 +243,7 @@ of NFS-ACCESS flag symbols. Returns (values post-op-attr access")
   (:union nfs-stat3
     (:ok (:list post-op-attr nfs-path3))
     (otherwise post-op-attr))
+  (:program nfs 3)
   (:arg-transformer (handle) handle)
   (:transformer (res)
     (if (eq (xunion-tag res) :ok)
@@ -286,6 +293,7 @@ of NFS-ACCESS flag symbols. Returns (values post-op-attr access")
 		:boolean
 		(:varray* :octet)))
     (otherwise post-op-attr))
+  (:program nfs 3)
   (:arg-transformer (handle offset count)
     (list handle offset count))
   (:transformer (res)
@@ -363,6 +371,7 @@ the end of the file was reached.")
   (:union nfs-stat3
     (:ok (:list wcc-data count3 stable-how write-verf3))
     (otherwise wcc-data))
+  (:program nfs 3)
   (:arg-transformer (handle offset data &key (stable :file-sync) (start 0) end)
     (list handle 
 	  offset 
@@ -426,6 +435,7 @@ the end of the file was reached.")
   (:union nfs-stat3
     (:ok (:list post-op-fh3 post-op-attr wcc-data))
     (otherwise wcc-data))
+  (:program nfs 3)
   (:arg-transformer (dhandle filename &key (mode :unchecked) sattr create-verf)
     (list (make-dir-op-args3 :dir dhandle :name filename)
 	  (make-xunion mode 
@@ -481,6 +491,7 @@ the end of the file was reached.")
   (:union nfs-stat3
     (:ok (:list post-op-fh3 post-op-attr wcc-data))
     (otherwise wcc-data))
+  (:program nfs 3)
   (:arg-transformer (dhandle name &key sattr)
     (list (make-dir-op-args3 :dir dhandle :name name)
 	  (or sattr (make-sattr3))))
@@ -529,6 +540,7 @@ the end of the file was reached.")
   (:union nfs-stat3
     (:ok (:list post-op-fh3 post-op-attr wcc-data))
     (otherwise wcc-data))
+  (:program nfs 3)
   (:arg-transformer (dhandle filename path &key attrs)
     (list (make-dir-op-args3 :dir dhandle 
 			     :name filename)
@@ -589,6 +601,7 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
   (:union nfs-stat3 
     (:ok (:list post-op-fh3 post-op-attr wcc-data))
     (otherwise wcc-data))
+  (:program nfs 3)
   (:arg-transformer (dhandle filename &key sattr specdata (ftype :reg))
     (list (make-dir-op-args3 :dir dhandle :name filename)
 	  (make-xunion ftype
@@ -640,6 +653,7 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
   (:union nfs-stat3
     (:ok wcc-data)
     (otherwise wcc-data))
+  (:program nfs 3)
   (:arg-transformer (dhandle filename)
     (make-dir-op-args3 :dir dhandle :name filename))
   (:transformer (res)
@@ -686,6 +700,7 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
   (:union nfs-stat3
     (:ok wcc-data)
     (otherwise wcc-data))
+  (:program nfs 3)
   (:arg-transformer (dhandle name)
     (make-dir-op-args3 :dir dhandle :name name))
   (:transformer (res)
@@ -743,6 +758,7 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
   (:union nfs-stat3
     (:ok (:list wcc-data wcc-data))
     (otherwise (:list wcc-data wcc-data)))
+  (:program nfs 3)
   (:arg-transformer (from-dhandle from-filename to-filename &key to-dhandle)
     (list (make-dir-op-args3 :dir from-dhandle 
 						    :name from-filename)
@@ -795,6 +811,7 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
   (:union nfs-stat3
     (:ok (:list post-op-attr wcc-data))
     (otherwise (:list post-op-attr wcc-data)))
+  (:program nfs 3)
   (:arg-transformer (handle dhandle filename)
     (list handle (make-dir-op-args3 :dir dhandle :name filename)))
   (:transformer (res)
@@ -866,6 +883,7 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
   (:union nfs-stat3
     (:ok (:list post-op-attr cookie-verf3 dir-list3))
     (otherwise post-op-attr))
+  (:program nfs 3)
   (:arg-transformer (dhandle &key cookie-verf (cookie 0) (count 65536))
     (list dhandle cookie (or cookie-verf (make-cookie-verf3)) count))
   (:transformer (res)
@@ -949,6 +967,7 @@ the data to put into the symlink. ATTRS are the initial attributes of the newly 
   (:union nfs-stat3
     (:ok (:list post-op-attr cookie-verf3 dir-list3-plus))
     (otherwise post-op-attr))
+  (:program nfs 3)
   (:arg-transformer (dhandle &key (count 65507) max (cookie 0) cookie-verf)
     (list dhandle cookie (or cookie-verf (make-cookie-verf3)) count (or max count)))
   (:transformer (res)
@@ -1000,6 +1019,7 @@ Returns (values (name handle attrs)* eof-p attrs cverf).")
   (:union nfs-stat3
     (:ok fs-stat)
     (otherwise post-op-attr))
+  (:program nfs 3)
   (:arg-transformer (handle) handle)
   (:transformer (res)
     (if (eq (xunion-tag res) :ok)
@@ -1049,6 +1069,7 @@ Returns (values (name handle attrs)* eof-p attrs cverf).")
   (:union nfs-stat3
     (:ok fs-info)
     (otherwise post-op-attr))
+  (:program nfs 3)
   (:arg-transformer (handle) handle)
   (:transformer (res)
     (if (eq (xunion-tag res) :ok)
@@ -1085,6 +1106,7 @@ Returns (values (name handle attrs)* eof-p attrs cverf).")
   (:union nfs-stat3
     (:ok path-conf)
     (otherwise post-op-attr))
+  (:program nfs 3)
   (:arg-transformer (handle) handle)
   (:transformer (res)
     (if (eq (xunion-tag res) :ok)
@@ -1123,6 +1145,7 @@ Returns (values (name handle attrs)* eof-p attrs cverf).")
   (:union nfs-stat3
     (:ok (:list wcc-data write-verf3))
     (otherwise wcc-data))
+  (:program nfs 3)
   (:arg-transformer (handle offset count) (list handle offset count))
   (:transformer (res)
     (if (eq (xunion-tag res) :ok)

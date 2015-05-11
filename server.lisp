@@ -15,7 +15,7 @@
 
 When NSM is non-nil, the NSM program, which facilitates server state change notifications, will be supported.
 
-If PORTS is supplied, it shouild be a list of integers specifying the port numbers to listen on (TCP and UDP will be used). Otherwise port *RPC-PORT* is used, which defaults to 2049.
+If PORTS is supplied, it should be a list of integers specifying the port numbers to listen on (both TCP and UDP will be used). Otherwise port *RPC-PORT* is used, which defaults to 2049.
 
 "  
   ;; if no ports specified, use the default port
