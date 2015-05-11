@@ -34,7 +34,8 @@
 (defconstant +nsm-program+ 100024)
 (defconstant +nsm-version+ 1)
 
-(use-rpc-program +nsm-program+ +nsm-version+)
+;;(use-rpc-program +nsm-program+ +nsm-version+)
+(defprogram nsm 100024)
 (use-rpc-host '*rpc-host* '*rpc-port*)
 
 ;; return status
@@ -188,6 +189,7 @@ The FUNCTION will be executed with arguments (hostname state private)."
   nil)
 
 (defrpc call-null 0 :void :void
+  (:program nsm 1)
   (:documentation "Test connectivity to the NSM service.")
   (:handler #'%handle-null))
 
@@ -198,6 +200,7 @@ The FUNCTION will be executed with arguments (hostname state private)."
   (list :fail 0))
 
 (defrpc call-stat 1 :string stat-res
+  (:program nsm 1)
   (:arg-transformer (hostname) hostname)
   (:transformer (res)
     (destructuring-bind (stat seqno) res
@@ -217,6 +220,7 @@ The FUNCTION will be executed with arguments (hostname state private)."
 (defrpc call-monitor 2 
   (:list :string my-id (:varray* :octet 16))
   stat-res
+  (:program nsm 1)
   (:arg-transformer (hostname &key (callback-hostname "localhost") (program 0) (version 0) (proc 0) private)
     (list (list hostname 
                 (make-my-id :name callback-hostname
@@ -241,6 +245,7 @@ The FUNCTION will be executed with arguments (hostname state private)."
 (defrpc call-unmonitor 3 
   (:list :string my-id)
   :int32
+  (:program nsm 1)
   (:arg-transformer (hostname &key (callback-hostname "localhost") (program 0) (version 0) (proc 0))
     (list hostname (make-my-id :name callback-hostname
                                :program program
@@ -258,6 +263,7 @@ The FUNCTION will be executed with arguments (hostname state private)."
   *state*)
 
 (defrpc call-unmonitor-all 4 my-id :int32
+  (:program nsm 1)
   (:arg-transformer (&key (callback-hostname "localhost") (program 0) (version 0) (proc 0))
     (make-my-id :name callback-hostname
                 :program program
@@ -276,6 +282,7 @@ The FUNCTION will be executed with arguments (hostname state private)."
   nil)
 
 (defrpc call-simulate-crash 5 :void :void
+  (:program nsm 1)
   (:documentation "Simulate a crash. The NSM will release all its current state information and reinitialize itself, incrementing its state variable. It reads through its notify list and sends notifications.")
   (:handler #'%handle-simulate-crash))
 
@@ -335,6 +342,7 @@ The FUNCTION will be executed with arguments (hostname state private)."
 (defrpc call-notify 6
   (:list :string :int32)
   :void
+  (:program nsm 1)
   (:arg-transformer (name state) (list name state))
   (:documentation "This RPC is used to inform servers that our local state has changed. NAME should be the local hostname, STATE should be the local state number.")
   (:handler #'%handle-notify))
