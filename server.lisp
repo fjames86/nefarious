@@ -33,7 +33,7 @@ If PORTS is supplied, it should be a list of integers specifying the port number
   (setf *server* (make-rpc-server :tcp-ports ports :udp-ports ports))
 
   ;; setup the port mappings
-  (port-mapper:add-all-mappings ports ports 
+  (frpc.bind:add-all-mappings ports ports 
                                 :rpc (not port-mapper))
   
   ;; when using locking NLM/NSM protocols we need to initialize the state variable 
@@ -45,7 +45,7 @@ If PORTS is supplied, it should be a list of integers specifying the port number
 (defun stop (&key (port-mapper #+(or windows win32)t #-(or windows win32)nil))
   "Stop the NFS server. If PORT-MAPPER is nil, it is assumed Lisp is not running the port mapper program and instead the local port-mapper is communicated with using RPC."
   (stop-rpc-server *server*)
-  (port-mapper:remove-all-mappings :rpc (not port-mapper))
+  (frpc.bind:remove-all-mappings :rpc (not port-mapper))
   nil)
 
 

@@ -69,7 +69,7 @@
 (defun register-client (hostname &key function id private)
   "Register to receive notifications on state changes of host named by HOSTNAME. To receive notifications, either supply a function of signature (hostname state private) or a MY-ID structure so receive notifications via RPC. If supplied, PRIVATE should be an array of 16 octets."
   (flet ((get-port (program version)
-           (port-mapper:call-get-port program version 
+           (frpc.bind:call-get-port program version 
                                       :query-protocol :udp 
                                       :protocol :udp
                                       :timeout nil
@@ -149,7 +149,7 @@
   (let ((local-hostname (machine-instance)))
     (dolist (server *servers*)
       (handler-case 
-          (let ((port (port-mapper:call-get-port +nsm-program+ +nsm-version+
+          (let ((port (frpc.bind:call-get-port +nsm-program+ +nsm-version+
                                                  :query-protocol :udp
                                                  :host server
                                                  :protocol :udp)))
@@ -299,7 +299,7 @@ The FUNCTION will be executed with arguments (hostname state private)."
   ;; if no port specified, then use port-mapper to find it
   (unless port
     (setf port 
-	  (port-mapper:call-get-port program version 
+	  (frpc.bind:call-get-port program version 
 				     :query-protocol :udp 
 				     :protocol :udp
 				     :host hostname)))
