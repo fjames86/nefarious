@@ -40,10 +40,3 @@
   (call-write (remote-handle provider) offset bytes :host (remote-node provider)))
 
 ;; basically all the other methods can be handled by the block provider
-
-
-
-
-
-
-              

@@ -227,9 +227,9 @@ be a string naming the mount-point that is exported by NFS."
 		       :ctime (make-nfs-time3 :seconds (or (nefarious.finfo:file-information-ctime info) 0))))
 	(error 'nfs-error :stat :bad-handle))))
 
-;; don't support this
-;;(defmethod (setf nfs-provider-attrs) (value (provider simple-provider) handle)
-;;  nil)
+;; seem to need this for Linux to be able to create files
+(defmethod (setf nfs-provider-attrs) (value (provider simple-provider) handle)
+  nil)
 
 (defmethod nfs-provider-lookup ((provider simple-provider) dh name)
   (nfs-log :info "dh: ~S name: ~S" dh name)
