@@ -25,6 +25,7 @@
            #:call-monitor
            #:call-unmonitor
            #:call-unmonitor-all
+	   #:call-simulate-crash
            #:call-notify))
 
 (in-package #:nefarious.nsm)
@@ -222,11 +223,11 @@ The FUNCTION will be executed with arguments (hostname state private)."
   stat-res
   (:program nsm 1)
   (:arg-transformer (hostname &key (callback-hostname "localhost") (program 0) (version 0) (proc 0) private)
-    (list (list hostname 
-                (make-my-id :name callback-hostname
-                            :program program
-                            :version version
-                            :proc proc))
+    (list hostname 
+	  (make-my-id :name callback-hostname
+		      :program program
+		      :version version
+		      :proc proc)
           (or private (nibbles:make-octet-vector 16))))
   (:transformer (res)
     (destructuring-bind (stat seqno) res
@@ -331,6 +332,7 @@ The FUNCTION will be executed with arguments (hostname state private)."
 	    ((client-id client)
 	     ;; an RPC was specified, call it 
 	     (let ((id (client-id client)))
+	       (frpc-log :info "Notifying ~A" id)
 	       (send-notification (list local-hostname *state* (client-private client))
 				  (my-id-name id)
 				  (my-id-program id)
