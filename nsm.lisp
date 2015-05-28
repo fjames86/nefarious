@@ -70,7 +70,7 @@
 (defun register-client (hostname &key function id private)
   "Register to receive notifications on state changes of host named by HOSTNAME. To receive notifications, either supply a function of signature (hostname state private) or a MY-ID structure so receive notifications via RPC. If supplied, PRIVATE should be an array of 16 octets."
   (flet ((get-port (program version)
-           (frpc.bind:call-get-port program version 
+           (frpc.bind:call-get-port program version
                                       :query-protocol :udp 
                                       :protocol :udp
                                       :timeout nil
