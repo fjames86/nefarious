@@ -174,7 +174,8 @@
 (defun register (hostname function &optional private)
   "Register to receive notifications on state change of the host named HOSTNAME. 
 
-The FUNCTION will be executed with arguments (hostname state private)."
+The FUNCTION will be executed with arguments (hostname state private). Note that the callback will be executed in the rpc-server thread,
+so it is vital the callback does not block."
   (register-server hostname)
   (register-client hostname :function function :private private))
 

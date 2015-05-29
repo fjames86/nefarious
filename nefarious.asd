@@ -7,6 +7,7 @@
   :author "Frank James <frank.a.james@gmail.com>"
   :description "An NFS implementation in Common Lisp"
   :license "MIT"
+  :version "1.0.7"
   :components
   ((:file "package")
    (:file "log" :depends-on ("package"))
