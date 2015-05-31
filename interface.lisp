@@ -430,7 +430,7 @@ the end of the file was reached.")
 (defrpc call-create 8 
   (:list dir-op-args3 
 	 (:union create-mode3 
-	   ((:unchecked :guared) sattr3)
+	   ((:unchecked :guarded) sattr3)
 	   (:exclusive create-verf3)))
   (:union nfs-stat3
     (:ok (:list post-op-fh3 post-op-attr wcc-data))
