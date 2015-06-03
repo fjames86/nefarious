@@ -69,16 +69,14 @@
 
 (defun register-client (hostname &key function id private)
   "Register to receive notifications on state changes of host named by HOSTNAME. To receive notifications, either supply a function of signature (hostname state private) or a MY-ID structure so receive notifications via RPC. If supplied, PRIVATE should be an array of 16 octets."
-  (flet ((get-port (program version)
-           (frpc.bind:call-get-port program version
+  (flet ((get-port (program)
+           (frpc.bind:call-get-port program 
                                       :query-protocol :udp 
                                       :protocol :udp
                                       :timeout nil
                                       :host hostname)))
     (let ((client (make-client :hostname hostname
-                                :port (when id 
-                                        (get-port (my-id-program id)
-                                                  (my-id-version id)))
+                                :port (when id (get-port (my-id-program id)))
                                 :id id
                                 :function function
                                 :private (or private (nibbles:make-octet-vector 16)))))
@@ -150,7 +148,7 @@
   (let ((local-hostname (machine-instance)))
     (dolist (server *servers*)
       (handler-case 
-          (let ((port (frpc.bind:call-get-port +nsm-program+ +nsm-version+
+          (let ((port (frpc.bind:call-get-port +nsm-program+ 
                                                  :query-protocol :udp
                                                  :host server
                                                  :protocol :udp)))
@@ -223,9 +221,9 @@ so it is vital the callback does not block."
   (:list :string my-id (:varray* :octet 16))
   stat-res
   (:program nsm 1)
-  (:arg-transformer (hostname &key (callback-hostname "localhost") (program 0) (version 0) (proc 0) private)
+  (:arg-transformer (hostname &key callback-hostname (program 0) (version 0) (proc 0) private)
     (list hostname 
-	  (make-my-id :name callback-hostname
+	  (make-my-id :name (or callback-hostname (machine-instance))
 		      :program program
 		      :version version
 		      :proc proc)
@@ -233,7 +231,13 @@ so it is vital the callback does not block."
   (:transformer (res)
     (destructuring-bind (stat seqno) res
       (values seqno (eq stat :success))))
-  (:documentation "Initiates monitoring of the specified host. When the notifications of state changes are received from the host, the new state is stored and all registered clients are notified.")
+  (:documentation "Initiates monitoring of the specified host. When the notifications of state changes are received from the host, the new state is stored and all registered clients are notified.
+
+HOSTNAME ::= name of the host you want the NSM service to monitor.
+CALLBACK-HOSTNAME ::= location the callback RPC should be sent to (defaults to machine-instance).
+PROGRAM, VERSION, PROC ::= callback RPC when the status changes.
+PRIVATE ::= 16 octets of private data sent with the callback.
+")
   (:handler #'%handle-monitor))
 
 ;; -------------------------------------
@@ -301,7 +305,7 @@ so it is vital the callback does not block."
   ;; if no port specified, then use port-mapper to find it
   (unless port
     (setf port 
-	  (frpc.bind:call-get-port program version 
+	  (frpc.bind:call-get-port program 
 				     :query-protocol :udp 
 				     :protocol :udp
 				     :host hostname)))
