@@ -173,7 +173,8 @@ be a string naming the mount-point that is exported by NFS."
     (with-open-file (f (handle-pathname handle)
 		       :direction :output 
 		       :if-exists :error
-		       :if-does-not-exist :create)))
+		       :if-does-not-exist :create)
+      (file-length f)))
   (allocate-handle provider dhandle name))
 
 (defun remove-file (provider dhandle name)
@@ -198,9 +199,11 @@ be a string naming the mount-point that is exported by NFS."
 
 ;; for the mount protocol
 (defmethod nfs-provider-mount ((provider simple-provider) client)
+  (declare (ignore client))
   (handle-fh (simple-provider-mount-handle provider)))
 
 (defmethod nfs-provider-unmount ((provider simple-provider) client)
+  (declare (ignore client))
   nil)
 
 ;; for nfs
@@ -229,6 +232,7 @@ be a string naming the mount-point that is exported by NFS."
 
 ;; seem to need this for Linux to be able to create files
 (defmethod (setf nfs-provider-attrs) (value (provider simple-provider) handle)
+  (declare (ignore value handle))
   nil)
 
 (defmethod nfs-provider-lookup ((provider simple-provider) dh name)
@@ -256,6 +260,7 @@ be a string naming the mount-point that is exported by NFS."
 	(error 'nfs-error :stat :noent))))
 
 (defmethod nfs-provider-access ((provider simple-provider) handle access)
+  (declare (ignore handle access))
   '(:read :lookup :modify :extend :delete :execute))
 
 (defmethod nfs-provider-read ((provider simple-provider) fh offset count)
@@ -301,8 +306,9 @@ be a string naming the mount-point that is exported by NFS."
 	  nil)
 	(error 'nfs-error :stat :bad-handle))))
 
-(defmethod nfs-provider-read-dir ((provider simple-provider) dh &key)
+(defmethod nfs-provider-read-dir ((provider simple-provider) dh &key cookie verf count &allow-other-keys)
   "Returns a list of all object (file and directory) names in the directory."
+  (declare (ignore cookie verf count))
   (let ((dhandle (find-handle provider dh)))
     (unless dhandle (error 'nfs-error :stat :bad-handle))
     (unless (handle-directory-p dhandle) (error 'nfs-error :stat :notdir))
@@ -344,6 +350,7 @@ be a string naming the mount-point that is exported by NFS."
 ;; filesystem information
 (defmethod nfs-provider-fs-info ((provider simple-provider) handle)
   "Returns dynamic filesystem information, in an FS-INFO structure."
+  (declare (ignore handle))
   (make-fs-info :attrs nil ;; attributes of the file 
 		:rtmax 32768 ;; maximum read request count
 		:rtpref 32768 ;; preferred read count -- should be same as rtmax
@@ -359,6 +366,7 @@ be a string naming the mount-point that is exported by NFS."
 
 (defmethod nfs-provider-fs-stat ((provider simple-provider) handle)
   "Returns static filesystem information, in an FS-STAT structure."
+  (declare (ignore handle))
   (make-fs-stat :attrs nil ;; fileattribvutes
 		:tbytes #xffffffff ;; total size of the filesystem
 		:fbytes #xffffffff ;; free bytes
@@ -370,6 +378,7 @@ be a string naming the mount-point that is exported by NFS."
 
 (defmethod nfs-provider-path-conf ((provider simple-provider) handle)
   "Returns a PATH-CONF structure containing information about the filesystem."
+  (declare (ignore handle))
   (make-path-conf :attr nil ;; file attributes
 		  :link-max 0 ;; max link size
 		  :link-max 0 ;; maximum number of hard links to an object
