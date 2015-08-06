@@ -121,45 +121,47 @@
   (handle :pointer)
   (info :pointer))
 
+(defconstant +FILE-FLAG-BACKUP-SEMANTICS+ #x02000000)
 (defun get-file-information (pathspec)
-  (let ((path (substitute #\\ #\/ (format nil "~A" (truename pathspec))))
-        (info (make-file-information)))
+  (let* ((path (substitute #\\ #\/ (format nil "~A" (truename pathspec))))
+         (info (make-file-information))
+         (dir-p (char= (char path (1- (length path))) #\\)))
     (nefarious:nfs-log :trace "fileinfo: ~A" path)
     (flet ((getinfo ()
-	     (let ((handle (with-foreign-string (p path)
-			     (%create-file path 
-					   #x10000000 ;; generic all
-					   0 ;; exclusive
-					   (null-pointer)
-					   4 ;; open always
-					   0 
-					   (null-pointer)))))
-	       (when (pointer-eq handle 
-				 (make-pointer #+(or x86-64 x64 amd64)#xffffffffffffffff
-					       #-(or x86-64 x64 amd64)#xffffffff))
-		 (get-last-error))
-	       (unwind-protect 
-		    (with-foreign-object (i '(:struct file-info))
-		      (let ((res (%get-file-information handle i)))
-			(cond
-			  (res
-			   (setf (file-information-size info)
-				 (+ (foreign-slot-value i '(:struct file-info) 'size-low)
-				    (ash (foreign-slot-value i '(:struct file-info) 'size-high)
-					 32))
-				 (file-information-nlinks info)
-				 (foreign-slot-value i '(:struct file-info) 'nlinks)
-				 (file-information-ctime info)
-				 (convert-time (foreign-slot-pointer i '(:struct file-info) 'ctime))
-				 (file-information-atime info)
-				 (convert-time (foreign-slot-pointer i '(:struct file-info) 'atime))
-				 (file-information-mtime info)
-				 (convert-time (foreign-slot-pointer i '(:struct file-info) 'mtime))))
-			  (t (get-last-error)))))
-		 (%close-handle handle)))))
+             (let ((handle (with-foreign-string (p path)
+                             (%create-file path 
+                                           0 ;;#x10000000 ;; generic all
+                                           0 ;; exclusive
+                                           (null-pointer)
+                                           4 ;; open always
+                                           (if dir-p +file-flag-backup-semantics+ 0) ;; flags
+                                           (null-pointer)))))
+               (when (pointer-eq handle 
+                                 (make-pointer #+(or x86-64 x64 amd64)#xffffffffffffffff
+                                               #-(or x86-64 x64 amd64)#xffffffff))
+                 (get-last-error))
+               (unwind-protect 
+                    (with-foreign-object (i '(:struct file-info))
+                      (let ((res (%get-file-information handle i)))
+                        (cond
+                          (res
+                           (setf (file-information-size info)
+                                 (+ (foreign-slot-value i '(:struct file-info) 'size-low)
+                                    (ash (foreign-slot-value i '(:struct file-info) 'size-high)
+                                         32))
+                                 (file-information-nlinks info)
+                                 (foreign-slot-value i '(:struct file-info) 'nlinks)
+                                 (file-information-ctime info)
+                                 (convert-time (foreign-slot-pointer i '(:struct file-info) 'ctime))
+                                 (file-information-atime info)
+                                 (convert-time (foreign-slot-pointer i '(:struct file-info) 'atime))
+                                 (file-information-mtime info)
+                                 (convert-time (foreign-slot-pointer i '(:struct file-info) 'mtime))))
+                          (t (get-last-error)))))
+                 (%close-handle handle)))))
       (handler-case (getinfo)
-	(error (e) 
-	  (nefarious:nfs-log :info "~A" e)))
+        (error (e) 
+          (nefarious:nfs-log :error "FINFO ~A" e)))
       info)))
 
 
