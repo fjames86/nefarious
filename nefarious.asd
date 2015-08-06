@@ -19,7 +19,7 @@
    (:file "nsm")
    (:file "server" :depends-on ("interface" "mount" "nsm"))
    (:file "streams" :depends-on ("server"))
-   (:file "finfo")
+   (:file "finfo" :depends-on ("package"))
    (:file "simple" :depends-on ("streams" "finfo")))
   :depends-on (:frpc :cl-fad :trivial-gray-streams :cffi))
 
