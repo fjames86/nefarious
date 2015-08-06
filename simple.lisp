@@ -22,6 +22,7 @@
   directory-p
   parent ;; nfs directory handle of the parent (or nil if toplevel export directory)
   children ;; nfs handles of children
+  info
   )
 
 (defun make-handle (dhandle name id)
@@ -36,7 +37,8 @@
 			:parent (handle-fh dhandle)
 			:directory-p (or (cl-fad:directory-exists-p pathname)
 					 (string= name ".")
-					 (string= name "..")))))
+					 (string= name ".."))
+			:info (nefarious.finfo:get-file-information pathname))))
     (when (handle-directory-p handle)
       (nfs-log :info "Attempt to make a file handle from a directory")
       (return-from make-handle nil))
@@ -58,7 +60,8 @@
 			:parent (handle-fh dhandle)
 			:directory-p (and (cl-fad:directory-pathname-p pathname)
 					  (cl-fad:directory-exists-p pathname)
-					  t))))
+					  t)
+			:info (nefarious.finfo:get-file-information pathname))))
     handle))
 
 (defun make-mount-handle (path)
@@ -69,7 +72,8 @@
 			:pathname pathname
 			:directory-p (and (cl-fad:directory-pathname-p pathname)
 					  (cl-fad:directory-exists-p pathname)
-					  t))))
+					  t)
+			:info (nefarious.finfo:get-file-information pathname))))
     handle))
 
 ;; --------------------
@@ -90,6 +94,10 @@
 
 (defun find-handle (provider fh)
   (find fh (simple-provider-handles provider) :key #'handle-fh :test #'equalp))
+
+(defun remove-handle (provider handle)
+  (setf (simple-provider-handles provider)
+	(remove handle (simple-provider-handles provider))))
 
 (defun lookup-handle (provider pathname)
   (find-if (lambda (handle)
@@ -210,7 +218,7 @@ be a string naming the mount-point that is exported by NFS."
 (defmethod nfs-provider-attrs ((provider simple-provider) fh)
   (let ((handle (find-handle provider fh)))
     (if handle
-	(let ((info (nefarious.finfo:get-file-information (handle-pathname handle))))
+	(let ((info (handle-info handle))) ;;(nefarious.finfo:get-file-information (handle-pathname handle))))
 	  (make-fattr3 :type (if (handle-directory-p handle)
 				 :dir
 				 :reg)
@@ -274,9 +282,14 @@ be a string naming the mount-point that is exported by NFS."
 (defmethod nfs-provider-write ((provider simple-provider) fh offset bytes)
   "Write bytes at offset to the object. Returns the number of bytes written."
   (let ((handle (find-handle provider fh)))
-    (if handle
-	(write-file handle offset bytes)
-	(error 'nfs-error :stat :bad-handle))))
+    (cond
+      (handle
+       (multiple-value-prog1 (write-file handle offset bytes)
+	 ;; update the cached file information
+	 (setf (handle-info handle)
+	       (nefarious.finfo:get-file-information (handle-pathname handle)))))
+      (t 
+       (error 'nfs-error :stat :bad-handle)))))
 
 (defmethod nfs-provider-create ((provider simple-provider) dh name)
   "Create a new file named NAME in directory DHANDLE."
@@ -290,10 +303,13 @@ be a string naming the mount-point that is exported by NFS."
 
 (defmethod nfs-provider-remove ((provider simple-provider) dhandle name)
   "Remove the file named HANDLE."
-  (let ((dhandle (find-handle provider dhandle)))
-    (if dhandle	
-	(remove-file provider dhandle name)	  
-	(error 'nfs-error :stat :bad-handle))))
+  (let ((handle (find-handle provider dhandle)))
+    (cond
+      (handle	
+       (remove-file provider handle name)
+       (remove-handle provider handle))
+      (t 
+       (error 'nfs-error :stat :bad-handle)))))
 
 (defmethod nfs-provider-rename ((provider simple-provider) fdh fname tdh tname)
   "Rename the file named by the FROM-DHANDLE/FROM-NAME."
